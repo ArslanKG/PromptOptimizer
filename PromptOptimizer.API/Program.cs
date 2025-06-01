@@ -1,6 +1,7 @@
 using PromptOptimizer.Application.Services;
 using PromptOptimizer.Core.Interfaces;
 using PromptOptimizer.Infrastructure.Clients;
+using PromptOptimizer.Infrastructure.Services;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,6 +16,7 @@ Log.Logger = new LoggerConfiguration()
 builder.Host.UseSerilog();
 
 // Add services to the container
+builder.Services.AddMemoryCache();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -38,6 +40,8 @@ builder.Services.AddHttpClient<ICortexApiClient, CortexApiClient>(client =>
 builder.Services.AddScoped<IPromptOptimizerService, PromptOptimizerService>();
 builder.Services.AddScoped<IOptimizationService, OptimizationService>();
 builder.Services.AddScoped<IModelOrchestrator, ModelOrchestrator>();
+
+builder.Services.AddSingleton<ISessionService, InMemorySessionService>();
 
 // Add CORS
 builder.Services.AddCors(options =>

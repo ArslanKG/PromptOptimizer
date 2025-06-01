@@ -10,6 +10,9 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PromptOptimizer.Application", "PromptOptimizer.Application\PromptOptimizer.Application.csproj", "{C4C26C1E-87F1-4775-90C3-02B5057C0B03}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PromptOptimizer.API", "PromptOptimizer.API\PromptOptimizer.API.csproj", "{18C28C6C-12A7-4055-BDEF-5E15C9F1B5E1}"
+	ProjectSection(ProjectDependencies) = postProject
+		{E40B1E4E-3D4C-4A1C-941E-630CD2FA47F8} = {E40B1E4E-3D4C-4A1C-941E-630CD2FA47F8}
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PromptOptimizer.Tests", "PromptOptimizer.Tests\PromptOptimizer.Tests.csproj", "{1824D54F-7E62-40D8-BFBC-C246AB8412AD}"
 EndProject

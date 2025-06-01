@@ -10,15 +10,18 @@ public class ModelOrchestrator : IModelOrchestrator
 {
     private readonly ICortexApiClient _cortexClient;
     private readonly IPromptOptimizerService _optimizerService;
+    private readonly ISessionService _sessionService;
     private readonly ILogger<ModelOrchestrator> _logger;
 
     public ModelOrchestrator(
         ICortexApiClient cortexClient,
         IPromptOptimizerService optimizerService,
+        ISessionService sessionService,
         ILogger<ModelOrchestrator> logger)
     {
         _cortexClient = cortexClient;
         _optimizerService = optimizerService;
+        _sessionService = sessionService;
         _logger = logger;
     }
 
@@ -31,168 +34,170 @@ public class ModelOrchestrator : IModelOrchestrator
 
         try
         {
-            return request.Strategy.ToLower() switch
+            var validStrategies = new[] { "quality", "speed", "consensus", "cost_effective" };
+            if (!validStrategies.Contains(request.Strategy.ToLower()))
+            {
+                throw new ArgumentException($"Invalid strategy: '{request.Strategy}'. Valid strategies are: {string.Join(", ", validStrategies)}");
+            }
+
+            ConversationSession? session = null;
+            if (request.EnableMemory)
+            {
+                if (string.IsNullOrEmpty(request.SessionId))
+                {
+                    session = await _sessionService.CreateSessionAsync();
+                    request.SessionId = session.SessionId;
+                }
+                else
+                {
+                    session = await _sessionService.GetSessionAsync(request.SessionId);
+                    if (session == null)
+                    {
+                        session = await _sessionService.CreateSessionAsync();
+                        request.SessionId = session.SessionId;
+                    }
+                }
+
+                await _sessionService.AddMessageAsync(request.SessionId, new ConversationMessage
+                {
+                    Role = "user",
+                    Content = request.Prompt,
+                    Timestamp = DateTime.UtcNow
+                });
+            }
+
+            var response = request.Strategy.ToLower() switch
             {
                 "quality" => await QualityStrategyAsync(request, modelsUsed, cancellationToken),
                 "speed" => await SpeedStrategyAsync(request, modelsUsed, cancellationToken),
                 "consensus" => await ConsensusStrategyAsync(request, modelsUsed, cancellationToken),
                 "cost_effective" => await CostEffectiveStrategyAsync(request, modelsUsed, cancellationToken),
-                _ => await QualityStrategyAsync(request, modelsUsed, cancellationToken)
+                _ => throw new ArgumentException($"Strategy '{request.Strategy}' is not implemented")
             };
+
+            if (request.EnableMemory && !string.IsNullOrEmpty(request.SessionId))
+            {
+                await _sessionService.AddMessageAsync(request.SessionId, new ConversationMessage
+                {
+                    Role = "assistant",
+                    Content = response.FinalResponse,
+                    Model = modelsUsed.LastOrDefault(),
+                    Timestamp = DateTime.UtcNow
+                });
+            }
+
+            response.Metadata ??= new Dictionary<string, object>();
+            response.Metadata["sessionId"] = request.SessionId ?? "";
+
+            return response;
+        }
+        catch (ArgumentException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in ProcessPromptAsync");
+            throw;
         }
         finally
         {
             stopwatch.Stop();
             _logger.LogInformation(
-                "Processed prompt with strategy {Strategy} in {ElapsedMs}ms using models: {Models}",
+                "Completed processing with strategy {Strategy} in {ElapsedMs}ms using models: {Models}",
                 request.Strategy,
                 stopwatch.ElapsedMilliseconds,
                 string.Join(", ", modelsUsed));
         }
     }
 
-    private async Task<OptimizationResponse> QualityStrategyAsync(
-        OptimizationRequest request,
-        List<string> modelsUsed,
-        CancellationToken cancellationToken)
-    {
-        var stopwatch = Stopwatch.StartNew();
-
-        try
-        {
-            var optimizationModel = "gpt-4o-mini";
-            modelsUsed.Add(optimizationModel);
-
-            var optimizedPrompt = await _optimizerService.OptimizePromptAsync(
-                request.Prompt,
-                request.OptimizationType,
-                optimizationModel,
-                cancellationToken);
-
-            _logger.LogInformation("Optimized prompt: {OptimizedPrompt}", optimizedPrompt);
-
-            var responseModel = request.PreferredModels?.FirstOrDefault(m =>
-                ModelInfo.EnabledModels.ContainsKey(m) &&
-                ModelInfo.EnabledModels[m].Type == "advanced") ?? "gpt-4o";
-            modelsUsed.Add(responseModel);
-
-            var responseRequest = new ChatCompletionRequest
-            {
-                Model = responseModel,
-                Messages = new List<ChatMessage>
-            {
-                new() { Role = "user", Content = optimizedPrompt }
-            },
-                Temperature = 0.7
-            };
-
-            var initialResponse = await _cortexClient.CreateChatCompletionAsync(
-                responseRequest,
-                cancellationToken);
-
-            var initialContent = initialResponse.Choices?.FirstOrDefault()?.Message?.Content;
-            if (string.IsNullOrEmpty(initialContent))
-            {
-                _logger.LogWarning("Initial response is empty from model {Model}", responseModel);
-                throw new InvalidOperationException($"No response from {responseModel}");
-            }
-
-            return new OptimizationResponse
-            {
-                OriginalPrompt = request.Prompt,
-                OptimizedPrompt = optimizedPrompt,
-                FinalResponse = initialContent,
-                ModelsUsed = modelsUsed,
-                Strategy = request.Strategy,
-                ProcessingTimeMs = stopwatch.ElapsedMilliseconds,
-                Metadata = new Dictionary<string, object>
-                {
-                    ["optimization_type"] = request.OptimizationType,
-                    ["total_tokens"] = initialResponse.Usage?.TotalTokens ?? 0
-                }
-            };
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error in QualityStrategyAsync");
-            throw;
-        }
-    }
-
-    private async Task<OptimizationResponse> SpeedStrategyAsync(
+    private async Task<OptimizationResponse> CostEffectiveStrategyAsync(
     OptimizationRequest request,
     List<string> modelsUsed,
     CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
-
-        var fastModel = request.PreferredModels?.FirstOrDefault(m =>
-            ModelInfo.AvailableModels[m].Type == "fast") ?? "gpt-4o-mini";
-        modelsUsed.Add(fastModel);
-
-        var chatRequest = new ChatCompletionRequest
+        try
         {
-            Model = fastModel,
-            Messages = new List<ChatMessage>
+            var cheapestModel = ModelInfo.EnabledModels
+                .OrderBy(m => m.Value.Cost)
+                .First().Key;
+            modelsUsed.Add(cheapestModel);
+
+            _logger.LogInformation("Using cheapest model: {Model} with cost: {Cost}",
+                cheapestModel, ModelInfo.EnabledModels[cheapestModel].Cost);
+
+            var chatRequest = await BuildRequestWithContext(
+                request,
+                request.Prompt,
+                cheapestModel,
+                0.7,
+                1000);
+
+            var response = await _cortexClient.CreateChatCompletionAsync(
+                chatRequest,
+                cancellationToken);
+
+            var content = response.Choices?.FirstOrDefault()?.Message?.Content;
+            if (string.IsNullOrEmpty(content))
             {
-                new() { Role = "system", Content = "Kısa, net ve hızlı cevaplar ver." },
-                new() { Role = "user", Content = request.Prompt }
-            },
-            Temperature = 0.5,
-            MaxTokens = 500
-        };
+                _logger.LogError("No response from model {Model}", cheapestModel);
+                throw new InvalidOperationException($"No response from {cheapestModel}");
+            }
 
-        var response = await _cortexClient.CreateChatCompletionAsync(
-            chatRequest,
-            cancellationToken);
-
-        return new OptimizationResponse
+            return new OptimizationResponse
+            {
+                OriginalPrompt = request.Prompt,
+                OptimizedPrompt = request.Prompt,
+                FinalResponse = content,
+                ModelsUsed = modelsUsed,
+                Strategy = request.Strategy,
+                ProcessingTimeMs = stopwatch.ElapsedMilliseconds,
+                Metadata = new Dictionary<string, object>
+                {
+                    ["estimated_cost"] = ModelInfo.EnabledModels[cheapestModel].Cost,
+                    ["model_used"] = cheapestModel
+                }
+            };
+        }
+        catch (Exception ex)
         {
-            OriginalPrompt = request.Prompt,
-            OptimizedPrompt = request.Prompt,
-            FinalResponse = response.Choices[0].Message.Content,
-            ModelsUsed = modelsUsed,
-            Strategy = request.Strategy,
-            ProcessingTimeMs = stopwatch.ElapsedMilliseconds
-        };
+            _logger.LogError(ex, "Error in CostEffectiveStrategyAsync");
+            throw;
+        }
     }
 
     private async Task<OptimizationResponse> ConsensusStrategyAsync(
-        OptimizationRequest request,
-        List<string> modelsUsed,
-        CancellationToken cancellationToken)
+    OptimizationRequest request,
+    List<string> modelsUsed,
+    CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
-
         try
         {
             var consensusModels = new[] { "gpt-4o-mini", "o3-mini", "grok-3-mini-beta" };
             var tasks = new List<Task<ChatCompletionResponse>>();
 
-            _logger.LogInformation("Starting consensus strategy with models: {Models}", string.Join(", ", consensusModels));
+            _logger.LogInformation("Starting consensus strategy with models: {Models}",
+                string.Join(", ", consensusModels));
 
             foreach (var model in consensusModels)
             {
                 modelsUsed.Add(model);
-                var chatRequest = new ChatCompletionRequest
-                {
-                    Model = model,
-                    Messages = new List<ChatMessage>
-                {
-                    new() { Role = "user", Content = request.Prompt }
-                },
-                    Temperature = 0.7,
-                    MaxTokens = 500
-                };
+                var chatRequest = await BuildRequestWithContext(
+                    request,
+                    request.Prompt,
+                    model,
+                    0.7,
+                    500);
 
                 tasks.Add(_cortexClient.CreateChatCompletionAsync(chatRequest, cancellationToken));
             }
 
             var responses = await Task.WhenAll(tasks);
-
             _logger.LogInformation("All consensus models responded successfully");
 
-            var synthesisModel = "gpt-4o-mini"; 
+            var synthesisModel = "gpt-4o-mini";
             modelsUsed.Add(synthesisModel);
 
             var validResponses = responses
@@ -207,9 +212,7 @@ public class ModelOrchestrator : IModelOrchestrator
 
             var synthesisPrompt = $@"
             Aşağıdaki {validResponses.Count} farklı AI modelinden gelen cevapları analiz et ve en iyi kısımları birleştirerek tek bir kapsamlı cevap oluştur:
-            
             {string.Join("\n\n", validResponses)}
-            
             Birleştirilmiş cevap net, tutarlı ve tüm modellerin güçlü yanlarını içermelidir.";
 
             var synthesisRequest = new ChatCompletionRequest
@@ -222,8 +225,6 @@ public class ModelOrchestrator : IModelOrchestrator
                 Temperature = 0.3,
                 MaxTokens = 1000
             };
-
-            _logger.LogInformation("Synthesizing responses with {Model}", synthesisModel);
 
             var finalResponse = await _cortexClient.CreateChatCompletionAsync(
                 synthesisRequest,
@@ -258,65 +259,160 @@ public class ModelOrchestrator : IModelOrchestrator
         }
     }
 
-    private async Task<OptimizationResponse> CostEffectiveStrategyAsync(
-        OptimizationRequest request,
-        List<string> modelsUsed,
-        CancellationToken cancellationToken)
+    private async Task<OptimizationResponse> QualityStrategyAsync(
+    OptimizationRequest request,
+    List<string> modelsUsed,
+    CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
-
         try
         {
-            var cheapestModel = ModelInfo.EnabledModels
-                .OrderBy(m => m.Value.Cost)
-                .First().Key;
+            // Step 1: Optimize prompt with fast model
+            var optimizationModel = "gpt-4o-mini";
+            modelsUsed.Add(optimizationModel);
 
-            modelsUsed.Add(cheapestModel);
+            var optimizedPrompt = await _optimizerService.OptimizePromptAsync(
+                request.Prompt,
+                request.OptimizationType,
+                optimizationModel,
+                cancellationToken);
 
-            _logger.LogInformation("Using cheapest model: {Model} with cost: {Cost}",
-                cheapestModel, ModelInfo.EnabledModels[cheapestModel].Cost);
+            _logger.LogInformation("Optimized prompt: {OptimizedPrompt}", optimizedPrompt);
 
-            var chatRequest = new ChatCompletionRequest
-            {
-                Model = cheapestModel,
-                Messages = new List<ChatMessage>
-            {
-                new() { Role = "user", Content = request.Prompt }
-            },
-                Temperature = 0.7,
-                MaxTokens = 1000
-            };
+            // Step 2: Get response with powerful model
+            var responseModel = request.PreferredModels?.FirstOrDefault(m =>
+                ModelInfo.EnabledModels.ContainsKey(m) &&
+                ModelInfo.EnabledModels[m].Type == "advanced") ?? "gpt-4o";
+            modelsUsed.Add(responseModel);
 
-            var response = await _cortexClient.CreateChatCompletionAsync(
+            // Context-aware request
+            var chatRequest = await BuildRequestWithContext(
+                request,
+                optimizedPrompt,
+                responseModel,
+                0.7);
+
+            var initialResponse = await _cortexClient.CreateChatCompletionAsync(
                 chatRequest,
                 cancellationToken);
 
-            var content = response.Choices?.FirstOrDefault()?.Message?.Content;
-            if (string.IsNullOrEmpty(content))
+            var initialContent = initialResponse.Choices?.FirstOrDefault()?.Message?.Content;
+            if (string.IsNullOrEmpty(initialContent))
             {
-                _logger.LogError("No response from model {Model}", cheapestModel);
-                throw new InvalidOperationException($"No response from {cheapestModel}");
+                _logger.LogWarning("Initial response is empty from model {Model}", responseModel);
+                throw new InvalidOperationException($"No response from {responseModel}");
             }
 
             return new OptimizationResponse
             {
                 OriginalPrompt = request.Prompt,
-                OptimizedPrompt = request.Prompt,
-                FinalResponse = content,
+                OptimizedPrompt = optimizedPrompt,
+                FinalResponse = initialContent,
                 ModelsUsed = modelsUsed,
                 Strategy = request.Strategy,
                 ProcessingTimeMs = stopwatch.ElapsedMilliseconds,
                 Metadata = new Dictionary<string, object>
                 {
-                    ["estimated_cost"] = ModelInfo.EnabledModels[cheapestModel].Cost,
-                    ["model_used"] = cheapestModel
+                    ["optimization_type"] = request.OptimizationType,
+                    ["total_tokens"] = initialResponse.Usage?.TotalTokens ?? 0
                 }
             };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in CostEffectiveStrategyAsync");
+            _logger.LogError(ex, "Error in QualityStrategyAsync");
             throw;
         }
+    }
+    private async Task<ChatCompletionRequest> BuildRequestWithContext(
+        OptimizationRequest request,
+        string prompt,
+        string model,
+        double temperature = 0.7,
+        int? maxTokens = null)
+    {
+        var messages = new List<ChatMessage>();
+
+        // Context ekle
+        if (request.EnableMemory && !string.IsNullOrEmpty(request.SessionId))
+        {
+            var context = await _sessionService.GetConversationContextAsync(
+                request.SessionId,
+                request.ContextWindowSize);
+
+            foreach (var msg in context)
+            {
+                messages.Add(new ChatMessage
+                {
+                    Role = msg.Role,
+                    Content = msg.Content
+                });
+            }
+        }
+
+        // Mevcut prompt'u ekle
+        messages.Add(new ChatMessage
+        {
+            Role = "user",
+            Content = prompt
+        });
+
+        var chatRequest = new ChatCompletionRequest
+        {
+            Model = model,
+            Messages = messages,
+            Temperature = temperature
+        };
+
+        if (maxTokens.HasValue)
+        {
+            chatRequest.MaxTokens = maxTokens.Value;
+        }
+
+        return chatRequest;
+    }
+
+    // SpeedStrategyAsync güncelleme örneği
+    private async Task<OptimizationResponse> SpeedStrategyAsync(
+        OptimizationRequest request,
+        List<string> modelsUsed,
+        CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var fastModel = request.PreferredModels?.FirstOrDefault(m =>
+            ModelInfo.AvailableModels[m].Type == "fast") ?? "gpt-4o-mini";
+        modelsUsed.Add(fastModel);
+
+        // Context-aware request oluştur
+        var chatRequest = await BuildRequestWithContext(
+            request,
+            request.Prompt,
+            fastModel,
+            0.5,
+            500);
+
+        // System message ekle (eğer context yoksa)
+        if (chatRequest.Messages.Count == 1)
+        {
+            chatRequest.Messages.Insert(0, new ChatMessage
+            {
+                Role = "system",
+                Content = "Kısa, net ve hızlı cevaplar ver."
+            });
+        }
+
+        var response = await _cortexClient.CreateChatCompletionAsync(
+            chatRequest,
+            cancellationToken);
+
+        return new OptimizationResponse
+        {
+            OriginalPrompt = request.Prompt,
+            OptimizedPrompt = request.Prompt,
+            FinalResponse = response.Choices[0].Message.Content,
+            ModelsUsed = modelsUsed,
+            Strategy = request.Strategy,
+            ProcessingTimeMs = stopwatch.ElapsedMilliseconds
+        };
     }
 }
