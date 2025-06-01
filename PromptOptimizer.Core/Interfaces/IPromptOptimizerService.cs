@@ -1,4 +1,4 @@
-﻿namespace PromptOptimizer.Core.Interfaces;
+﻿using PromptOptimizer.Core.DTOs;
 
 public interface IPromptOptimizerService
 {
@@ -6,5 +6,6 @@ public interface IPromptOptimizerService
         string originalPrompt,
         string optimizationType = "clarity",
         string model = "gpt-4o-mini",
+        List<ConversationMessage>? context = null,
         CancellationToken cancellationToken = default);
 }

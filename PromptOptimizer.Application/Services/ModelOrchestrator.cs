@@ -260,14 +260,23 @@ public class ModelOrchestrator : IModelOrchestrator
     }
 
     private async Task<OptimizationResponse> QualityStrategyAsync(
-    OptimizationRequest request,
-    List<string> modelsUsed,
-    CancellationToken cancellationToken)
+        OptimizationRequest request,
+        List<string> modelsUsed,
+        CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            // Step 1: Optimize prompt with fast model
+            // Context'i al (eğer session varsa)
+            List<ConversationMessage>? context = null;
+            if (request.EnableMemory && !string.IsNullOrEmpty(request.SessionId))
+            {
+                context = await _sessionService.GetConversationContextAsync(
+                    request.SessionId,
+                    request.ContextWindowSize ?? 5);
+            }
+
+            // Step 1: Optimize prompt with context
             var optimizationModel = "gpt-4o-mini";
             modelsUsed.Add(optimizationModel);
 
@@ -275,9 +284,11 @@ public class ModelOrchestrator : IModelOrchestrator
                 request.Prompt,
                 request.OptimizationType,
                 optimizationModel,
+                context,
                 cancellationToken);
 
-            _logger.LogInformation("Optimized prompt: {OptimizedPrompt}", optimizedPrompt);
+            _logger.LogInformation("Original: '{Original}', Optimized: '{Optimized}'",
+                request.Prompt, optimizedPrompt);
 
             // Step 2: Get response with powerful model
             var responseModel = request.PreferredModels?.FirstOrDefault(m =>
@@ -285,10 +296,12 @@ public class ModelOrchestrator : IModelOrchestrator
                 ModelInfo.EnabledModels[m].Type == "advanced") ?? "gpt-4o";
             modelsUsed.Add(responseModel);
 
+            var finalPrompt = $"{optimizedPrompt}\n\n(Lütfen cevabını Türkçe olarak ver.)";
+
             // Context-aware request
             var chatRequest = await BuildRequestWithContext(
                 request,
-                optimizedPrompt,
+                finalPrompt,
                 responseModel,
                 0.7);
 

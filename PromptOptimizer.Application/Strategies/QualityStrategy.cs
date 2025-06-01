@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using Polly;
 using PromptOptimizer.Core.Constants;
 using PromptOptimizer.Core.DTOs;
 using PromptOptimizer.Core.Entities;
@@ -13,8 +14,9 @@ public class QualityStrategy : BaseStrategy
     public QualityStrategy(
         ICortexApiClient cortexClient,
         IPromptOptimizerService optimizerService,
+        ISessionService sessionService,
         ILogger<QualityStrategy> logger)
-        : base(cortexClient, optimizerService, logger)
+        : base(cortexClient, optimizerService, sessionService, logger)
     {
     }
 
@@ -29,10 +31,19 @@ public class QualityStrategy : BaseStrategy
             var optimizationModel = "gpt-4o-mini";
             ModelsUsed.Add(optimizationModel);
 
+            List<ConversationMessage>? context = null;
+            if (request.EnableMemory && !string.IsNullOrEmpty(request.SessionId))
+            {
+                context = await SessionService.GetConversationContextAsync(
+                    request.SessionId,
+                    request.ContextWindowSize ?? 5);
+            }
+
             var optimizedPrompt = await OptimizerService.OptimizePromptAsync(
                 request.Prompt,
                 request.OptimizationType,
                 optimizationModel,
+                context,
                 cancellationToken);
 
             Logger.LogInformation(LogMessages.OptimizedPrompt, optimizedPrompt);

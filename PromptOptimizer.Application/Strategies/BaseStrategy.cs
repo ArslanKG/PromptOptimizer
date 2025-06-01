@@ -10,6 +10,7 @@ public abstract class BaseStrategy : IOptimizationStrategy
 {
     protected readonly ICortexApiClient CortexClient;
     protected readonly IPromptOptimizerService OptimizerService;
+    protected readonly ISessionService SessionService;
     protected readonly ILogger Logger;
     protected readonly List<string> ModelsUsed = new();
     protected readonly Stopwatch Stopwatch = new();
@@ -19,10 +20,12 @@ public abstract class BaseStrategy : IOptimizationStrategy
     protected BaseStrategy(
         ICortexApiClient cortexClient,
         IPromptOptimizerService optimizerService,
+        ISessionService sessionService,
         ILogger logger)
     {
         CortexClient = cortexClient;
         OptimizerService = optimizerService;
+        SessionService = sessionService;
         Logger = logger;
     }
 
