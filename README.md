@@ -1,35 +1,55 @@
-# 🧠 Multi-Model Prompt Optimizer
+# 🧠 PromptOptimizer - Multi-Model AI Prompt Optimization API
 
-## Tanım
+[![.NET](https://img.shields.io/badge/.NET-8.0-512BD4)](https://dotnet.microsoft.com/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Multi-Model Prompt Optimizer, kullanıcıdan alınan bir prompt'u çeşitli yapay zeka modelleri aracılığıyla önce optimize eden, ardından en iyi cevabı oluşturmak için farklı stratejilerle işleyen bir yapay zeka zinciri projesidir.
+## 📋 Açıklama
 
-Bu sistem:
-- Prompt'u daha spesifik ve etkili hale getirir
-- Farklı modellerle cevaplar alır
-- Gelişmiş ve detaylandırılmış final yanıt oluşturur
+PromptOptimizer, kullanıcıdan alınan promptları optimize eden ve birden fazla AI modelini kullanarak en iyi yanıtı üreten gelişmiş bir API'dir. Clean Architecture prensiplerine uygun olarak .NET 8 ile geliştirilmiştir.
 
 ## 🚀 Özellikler
 
-- ✅ Prompt iyileştirme (optimizasyon)
-- ✅ AI cevap geliştirme (enhancement)
-- ✅ Çoklu model desteği (gpt-4o, gemini, deepseek vs.)
-- ✅ Strateji seçimi: `quality`, `speed`, `consensus`, `cost_effective`
-- ✅ .NET 8 backend (ASP.NET Core Web API)
-- ✅ Swagger/OpenAPI arayüzü
-- ✅ Polly ile hata dayanıklılığı
-- ✅ Serilog ile loglama
-- ✅ Health check endpoint'i
-- ✅ Frontend için React uyumlu JSON API
+### Temel Özellikler
+- ✅ **Multi-Model Desteği**: GPT-4o, Deepseek, Grok ve daha fazlası
+- ✅ **Prompt Optimizasyonu**: 4 farklı optimizasyon tipi (Clarity, Technical, Creative, Analytical)
+- ✅ **Strateji Seçenekleri**: Quality, Speed, Consensus, Cost Effective
+- ✅ **Session Management**: Konuşma geçmişi ve context yönetimi
+- ✅ **JWT Authentication**: Güvenli API erişimi
+- ✅ **Swagger/OpenAPI**: İnteraktif API dokümantasyonu
+
+### Teknik Özellikler
+- 🏗️ Clean Architecture
+- 🔒 JWT Bearer Authentication
+- 📝 Serilog ile yapılandırılmış loglama
+- 🔄 Polly ile HTTP resilience
+- 💾 Entity Framework Core (SQLite)
+- 🧪 Unit test altyapısı
+
 
 ## 🧱 Proje Yapısı
 
 ```bash
 PromptOptimizer/
 ├── src/
-│   ├── PromptOptimizer.API/          # ASP.NET Core API
-│   ├── PromptOptimizer.Core/         # Entity, DTO, Interface
-│   ├── PromptOptimizer.Application/  # Servisler ve orchestrator
-│   └── PromptOptimizer.Infrastructure/ # CortexAPI istemcisi
+│ ├── PromptOptimizer.API/ # Web API katmanı
+│ ├── PromptOptimizer.Core/ # Domain entities, interfaces, DTOs
+│ ├── PromptOptimizer.Application/ # Business logic, services
+│ └── PromptOptimizer.Infrastructure/# External services, data access
 └── tests/
-    └── PromptOptimizer.Tests/        # Unit test'ler
+└── PromptOptimizer.Tests/ # Unit tests
+
+
+
+## 🛠️ Kurulum
+
+### Gereksinimler
+- .NET 8.0 SDK
+- Visual Studio 2022 / VS Code / Rider
+- SQLite (otomatik kurulur)
+
+### Adım Adım Kurulum
+
+1. **Projeyi klonlayın**
+   ```bash
+   git clone https://github.com/yourusername/PromptOptimizer.git
+   cd PromptOptimizer

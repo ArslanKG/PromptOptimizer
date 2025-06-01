@@ -372,6 +372,36 @@ public class ModelOrchestrator : IModelOrchestrator
         return chatRequest;
     }
 
+    private ModelInfo SelectModelByStrategy(string strategy, string? optimizationType = null)
+    {
+        var availableModels = ModelInfo.EnabledModels
+            .Select(kvp => kvp.Value)
+            .ToList();
+
+        return strategy.ToLower() switch
+        {
+            "quality" => availableModels
+                .Where(m => m.Type == "advanced")
+                .OrderByDescending(m => m.Cost)
+                .FirstOrDefault() ?? availableModels.First(),
+
+            "speed" => availableModels
+                .Where(m => m.Type == "fast")
+                .OrderBy(m => m.Cost)
+                .FirstOrDefault() ?? availableModels.First(),
+
+            "cost_effective" => availableModels
+                .OrderBy(m => m.Cost)
+                .First(),
+
+            "consensus" => availableModels
+                .Where(m => m.Type == "balanced")
+                .FirstOrDefault() ?? availableModels.First(),
+
+            _ => availableModels.First()
+        };
+    }
+
     // SpeedStrategyAsync güncelleme örneği
     private async Task<OptimizationResponse> SpeedStrategyAsync(
         OptimizationRequest request,

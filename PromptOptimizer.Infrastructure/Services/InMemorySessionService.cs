@@ -139,5 +139,22 @@ namespace PromptOptimizer.Infrastructure.Services
                 LastActivityAt = session.LastActivityAt
             };
         }
+
+        public Task<bool> SessionExistsAsync(string sessionId)
+        {
+            return Task.FromResult(_cache.TryGetValue($"session_{sessionId}", out _));
+        }
+
+        public Task AddMessageAsync(string sessionId, string role, string content)
+        {
+            var message = new ConversationMessage
+            {
+                Role = role,
+                Content = content,
+                Timestamp = DateTime.UtcNow
+            };
+
+            return AddMessageAsync(sessionId, message);
+        }
     }
 }

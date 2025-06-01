@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using PromptOptimizer.Core.Constants;
 using PromptOptimizer.Core.DTOs;
 using PromptOptimizer.Core.Entities;
@@ -6,6 +7,7 @@ using PromptOptimizer.Core.Interfaces;
 
 namespace PromptOptimizer.API.Controllers
 {
+    [Authorize]
     [ApiController]
     [Route("api/[controller]")]
     public class OptimizationController : ControllerBase
@@ -93,6 +95,7 @@ namespace PromptOptimizer.API.Controllers
         /// <summary>
         /// Health check endpoint
         /// </summary>
+        [AllowAnonymous]
         [HttpGet("health")]
         [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
         public IActionResult HealthCheck()
@@ -194,8 +197,12 @@ namespace PromptOptimizer.API.Controllers
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         public async Task<IActionResult> ClearSession(string sessionId)
         {
-            await _sessionService.ClearSessionAsync(sessionId);
-            return NoContent();
+            var result = await _sessionService.ClearSessionAsync(sessionId);
+            if (result)
+            {
+                return NoContent();
+            }
+            return NotFound(new { error = "Session not found" });
         }
     }
 }

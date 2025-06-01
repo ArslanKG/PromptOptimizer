@@ -361,3 +361,12 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# PromptOptimizer Specific
+*.db
+*.db-shm
+*.db-wal
+appsettings.Development.json
+appsettings.Production.json
+**/secrets.json
+logs/
