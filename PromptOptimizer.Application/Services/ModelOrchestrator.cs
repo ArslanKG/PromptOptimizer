@@ -60,7 +60,6 @@ public class ModelOrchestrator : IModelOrchestrator
 
         try
         {
-            // Step 1: Optimize prompt with fast model
             var optimizationModel = "gpt-4o-mini";
             modelsUsed.Add(optimizationModel);
 
@@ -72,7 +71,6 @@ public class ModelOrchestrator : IModelOrchestrator
 
             _logger.LogInformation("Optimized prompt: {OptimizedPrompt}", optimizedPrompt);
 
-            // Step 2: Get response with powerful model
             var responseModel = request.PreferredModels?.FirstOrDefault(m =>
                 ModelInfo.EnabledModels.ContainsKey(m) &&
                 ModelInfo.EnabledModels[m].Type == "advanced") ?? "gpt-4o";
@@ -98,9 +96,6 @@ public class ModelOrchestrator : IModelOrchestrator
                 _logger.LogWarning("Initial response is empty from model {Model}", responseModel);
                 throw new InvalidOperationException($"No response from {responseModel}");
             }
-
-            // Step 3: Skip enhancement for now since gemini is not working
-            // Just return the high-quality response from gpt-4o
 
             return new OptimizationResponse
             {
@@ -131,7 +126,6 @@ public class ModelOrchestrator : IModelOrchestrator
     {
         var stopwatch = Stopwatch.StartNew();
 
-        // Use only fast models
         var fastModel = request.PreferredModels?.FirstOrDefault(m =>
             ModelInfo.AvailableModels[m].Type == "fast") ?? "gpt-4o-mini";
         modelsUsed.Add(fastModel);
@@ -172,7 +166,6 @@ public class ModelOrchestrator : IModelOrchestrator
 
         try
         {
-            // Use only fast, working models for consensus
             var consensusModels = new[] { "gpt-4o-mini", "o3-mini", "grok-3-mini-beta" };
             var tasks = new List<Task<ChatCompletionResponse>>();
 
@@ -189,19 +182,17 @@ public class ModelOrchestrator : IModelOrchestrator
                     new() { Role = "user", Content = request.Prompt }
                 },
                     Temperature = 0.7,
-                    MaxTokens = 500 // Limit response size for faster processing
+                    MaxTokens = 500
                 };
 
                 tasks.Add(_cortexClient.CreateChatCompletionAsync(chatRequest, cancellationToken));
             }
 
-            // Wait for all tasks to complete
             var responses = await Task.WhenAll(tasks);
 
             _logger.LogInformation("All consensus models responded successfully");
 
-            // Synthesize responses with a faster model
-            var synthesisModel = "gpt-4o-mini"; // Use faster model for synthesis
+            var synthesisModel = "gpt-4o-mini"; 
             modelsUsed.Add(synthesisModel);
 
             var validResponses = responses
@@ -276,7 +267,6 @@ public class ModelOrchestrator : IModelOrchestrator
 
         try
         {
-            // Use cheapest enabled model
             var cheapestModel = ModelInfo.EnabledModels
                 .OrderBy(m => m.Value.Cost)
                 .First().Key;

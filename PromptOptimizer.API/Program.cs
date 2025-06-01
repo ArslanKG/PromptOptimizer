@@ -26,7 +26,6 @@ builder.Services.AddSwaggerGen(c =>
         Description = "Multi-model AI prompt optimization service"
     });
 
-    // XML documentation satýrýný kaldýrdýk çünkü dosya yok
 });
 
 // Configure HttpClient for CortexAPI
@@ -37,6 +36,7 @@ builder.Services.AddHttpClient<ICortexApiClient, CortexApiClient>(client =>
 
 // Register application services
 builder.Services.AddScoped<IPromptOptimizerService, PromptOptimizerService>();
+builder.Services.AddScoped<IOptimizationService, OptimizationService>();
 builder.Services.AddScoped<IModelOrchestrator, ModelOrchestrator>();
 
 // Add CORS
@@ -65,7 +65,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "Prompt Optimizer API V1");
-        c.RoutePrefix = string.Empty; // Swagger'ý root'ta aç
+        c.RoutePrefix = string.Empty;
     });
 }
 

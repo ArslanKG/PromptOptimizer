@@ -3,8 +3,8 @@
 public class OptimizationRequest
 {
     public string Prompt { get; set; } = string.Empty;
-    public string Strategy { get; set; } = "quality"; // quality, speed, consensus, cost_effective
-    public string OptimizationType { get; set; } = "clarity"; // clarity, technical, creative, analytical
+    public string Strategy { get; set; } = "quality";
+    public string OptimizationType { get; set; } = "clarity";
     public List<string>? PreferredModels { get; set; }
 }
 
