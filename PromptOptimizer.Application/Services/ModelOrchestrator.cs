@@ -1,4 +1,6 @@
 ﻿using System.Diagnostics;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using PromptOptimizer.Core.DTOs;
 using PromptOptimizer.Core.Entities;
@@ -12,17 +14,23 @@ public class ModelOrchestrator : IModelOrchestrator
     private readonly IPromptOptimizerService _optimizerService;
     private readonly ISessionService _sessionService;
     private readonly ILogger<ModelOrchestrator> _logger;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
+    private readonly ISessionCacheService _sessionCacheService;
 
     public ModelOrchestrator(
         ICortexApiClient cortexClient,
         IPromptOptimizerService optimizerService,
         ISessionService sessionService,
+        IHttpContextAccessor? httpContextAccessor,
+        ISessionCacheService sessionCacheService,
         ILogger<ModelOrchestrator> logger)
     {
         _cortexClient = cortexClient;
         _optimizerService = optimizerService;
         _sessionService = sessionService;
         _logger = logger;
+        _httpContextAccessor = httpContextAccessor;
+        _sessionCacheService = sessionCacheService;
     }
 
     public async Task<OptimizationResponse> ProcessPromptAsync(
@@ -37,31 +45,27 @@ public class ModelOrchestrator : IModelOrchestrator
             var validStrategies = new[] { "quality", "speed", "consensus", "cost_effective" };
             if (!validStrategies.Contains(request.Strategy.ToLower()))
             {
-                throw new ArgumentException($"Invalid strategy: '{request.Strategy}'. Valid strategies are: {string.Join(", ", validStrategies)}");
+                throw new ArgumentException($"Invalid strategy: '{request.Strategy}'");
             }
 
             ConversationSession? session = null;
             if (request.EnableMemory)
             {
+                int? currentUserId = GetCurrentUserId();
+                _logger.LogInformation("Current user ID from JWT: {UserId}", currentUserId);
+
                 if (string.IsNullOrEmpty(request.SessionId))
                 {
-                    session = await _sessionService.CreateSessionAsync();
+                    session = await _sessionService.CreateSessionAsync(currentUserId);
                     request.SessionId = session.SessionId;
-                }
-                else
-                {
-                    session = await _sessionService.GetSessionAsync(request.SessionId);
-                    if (session == null)
-                    {
-                        session = await _sessionService.CreateSessionAsync();
-                        request.SessionId = session.SessionId;
-                    }
+                    _logger.LogInformation("Created new session {SessionId} for user {UserId}",
+                        session.SessionId, currentUserId);
                 }
 
-                await _sessionService.AddMessageAsync(request.SessionId, new ConversationMessage
+                await _sessionCacheService.AddMessageToSessionAsync(request.SessionId, new ConversationMessage
                 {
                     Role = "user",
-                    Content = request.Prompt,
+                    Content = request.Prompt, // Original user prompt
                     Timestamp = DateTime.UtcNow
                 });
             }
@@ -77,11 +81,11 @@ public class ModelOrchestrator : IModelOrchestrator
 
             if (request.EnableMemory && !string.IsNullOrEmpty(request.SessionId))
             {
-                await _sessionService.AddMessageAsync(request.SessionId, new ConversationMessage
+                await _sessionCacheService.AddMessageToSessionAsync(request.SessionId, new ConversationMessage
                 {
                     Role = "assistant",
                     Content = response.FinalResponse,
-                    Model = modelsUsed.LastOrDefault(),
+                    Model = modelsUsed.LastOrDefault(), 
                     Timestamp = DateTime.UtcNow
                 });
             }
@@ -110,6 +114,7 @@ public class ModelOrchestrator : IModelOrchestrator
                 string.Join(", ", modelsUsed));
         }
     }
+
 
     private async Task<OptimizationResponse> CostEffectiveStrategyAsync(
     OptimizationRequest request,
@@ -265,69 +270,56 @@ public class ModelOrchestrator : IModelOrchestrator
         CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
+
         try
         {
-            // Context'i al (eğer session varsa)
-            List<ConversationMessage>? context = null;
-            if (request.EnableMemory && !string.IsNullOrEmpty(request.SessionId))
-            {
-                context = await _sessionService.GetConversationContextAsync(
-                    request.SessionId,
-                    request.ContextWindowSize ?? 5);
-            }
-
-            // Step 1: Optimize prompt with context
             var optimizationModel = "gpt-4o-mini";
             modelsUsed.Add(optimizationModel);
 
-            var optimizedPrompt = await _optimizerService.OptimizePromptAsync(
-                request.Prompt,
-                request.OptimizationType,
-                optimizationModel,
-                context,
-                cancellationToken);
+            string optimizedPrompt;
 
-            _logger.LogInformation("Original: '{Original}', Optimized: '{Optimized}'",
+            if (request.EnableMemory && !string.IsNullOrEmpty(request.SessionId))
+            {
+                optimizedPrompt = await _optimizerService.OptimizePromptWithSessionAsync(
+                    request.Prompt,
+                    request.OptimizationType,
+                    optimizationModel,
+                    request.SessionId,
+                    _sessionCacheService,
+                    cancellationToken);
+            }
+            else
+            {
+                optimizedPrompt = await _optimizerService.OptimizePromptAsync(
+                    request.Prompt,
+                    request.OptimizationType,
+                    optimizationModel,
+                    null,
+                    cancellationToken);
+            }
+
+            _logger.LogInformation("Original: '{Original}' → Optimized: '{Optimized}'",
                 request.Prompt, optimizedPrompt);
 
-            // Step 2: Get response with powerful model
-            var responseModel = request.PreferredModels?.FirstOrDefault(m =>
-                ModelInfo.EnabledModels.ContainsKey(m) &&
-                ModelInfo.EnabledModels[m].Type == "advanced") ?? "gpt-4o";
+            var responseModel = "gpt-4o";
             modelsUsed.Add(responseModel);
 
             var finalPrompt = $"{optimizedPrompt}\n\n(Lütfen cevabını Türkçe olarak ver.)";
-
-            // Context-aware request
-            var chatRequest = await BuildRequestWithContext(
-                request,
-                finalPrompt,
-                responseModel,
-                0.7);
-
-            var initialResponse = await _cortexClient.CreateChatCompletionAsync(
-                chatRequest,
-                cancellationToken);
-
-            var initialContent = initialResponse.Choices?.FirstOrDefault()?.Message?.Content;
-            if (string.IsNullOrEmpty(initialContent))
-            {
-                _logger.LogWarning("Initial response is empty from model {Model}", responseModel);
-                throw new InvalidOperationException($"No response from {responseModel}");
-            }
+            var chatRequest = await BuildRequestWithContext(request, finalPrompt, responseModel, 0.7);
+            var response = await _cortexClient.CreateChatCompletionAsync(chatRequest, cancellationToken);
 
             return new OptimizationResponse
             {
                 OriginalPrompt = request.Prompt,
                 OptimizedPrompt = optimizedPrompt,
-                FinalResponse = initialContent,
+                FinalResponse = response.Choices?.FirstOrDefault()?.Message?.Content ?? "",
                 ModelsUsed = modelsUsed,
                 Strategy = request.Strategy,
                 ProcessingTimeMs = stopwatch.ElapsedMilliseconds,
                 Metadata = new Dictionary<string, object>
                 {
                     ["optimization_type"] = request.OptimizationType,
-                    ["total_tokens"] = initialResponse.Usage?.TotalTokens ?? 0
+                    ["total_tokens"] = response.Usage?.TotalTokens ?? 0
                 }
             };
         }
@@ -346,24 +338,20 @@ public class ModelOrchestrator : IModelOrchestrator
     {
         var messages = new List<ChatMessage>();
 
-        // Context ekle
+        // Optimized context al (eğer session varsa)
         if (request.EnableMemory && !string.IsNullOrEmpty(request.SessionId))
         {
-            var context = await _sessionService.GetConversationContextAsync(
+            var contextMessages = await _sessionCacheService.GetOptimizedContextAsync(
                 request.SessionId,
-                request.ContextWindowSize);
+                4000); // 4000 token limit
 
-            foreach (var msg in context)
-            {
-                messages.Add(new ChatMessage
-                {
-                    Role = msg.Role,
-                    Content = msg.Content
-                });
-            }
+            messages.AddRange(contextMessages);
+
+            _logger.LogInformation("Added {Count} optimized context messages for session {SessionId}",
+                contextMessages.Count, request.SessionId);
         }
 
-        // Mevcut prompt'u ekle
+        // Yeni mesajı ekle
         messages.Add(new ChatMessage
         {
             Role = "user",
@@ -415,7 +403,6 @@ public class ModelOrchestrator : IModelOrchestrator
         };
     }
 
-    // SpeedStrategyAsync güncelleme örneği
     private async Task<OptimizationResponse> SpeedStrategyAsync(
         OptimizationRequest request,
         List<string> modelsUsed,
@@ -426,7 +413,6 @@ public class ModelOrchestrator : IModelOrchestrator
             ModelInfo.AvailableModels[m].Type == "fast") ?? "gpt-4o-mini";
         modelsUsed.Add(fastModel);
 
-        // Context-aware request oluştur
         var chatRequest = await BuildRequestWithContext(
             request,
             request.Prompt,
@@ -434,7 +420,6 @@ public class ModelOrchestrator : IModelOrchestrator
             0.5,
             500);
 
-        // System message ekle (eğer context yoksa)
         if (chatRequest.Messages.Count == 1)
         {
             chatRequest.Messages.Insert(0, new ChatMessage
@@ -457,5 +442,38 @@ public class ModelOrchestrator : IModelOrchestrator
             Strategy = request.Strategy,
             ProcessingTimeMs = stopwatch.ElapsedMilliseconds
         };
+    }
+
+    private int? GetCurrentUserId()
+    {
+        try
+        {
+            var httpContext = _httpContextAccessor?.HttpContext;
+            if (httpContext?.User?.Identity?.IsAuthenticated == true)
+            {
+                var userIdClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                if (!string.IsNullOrEmpty(userIdClaim) && int.TryParse(userIdClaim, out var userId))
+                {
+                    _logger.LogDebug("Successfully extracted user ID from JWT: {UserId}", userId);
+                    return userId;
+                }
+                else
+                {
+                    _logger.LogWarning("User ID claim found but could not parse: {Claim}", userIdClaim);
+                }
+            }
+            else
+            {
+                _logger.LogWarning("User is not authenticated or HttpContext is null");
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error extracting user ID from JWT claims");
+            return null;
+        }
     }
 }

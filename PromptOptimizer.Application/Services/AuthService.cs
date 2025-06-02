@@ -4,8 +4,6 @@ using Microsoft.Extensions.Logging;
 using PromptOptimizer.Core.DTOs;
 using PromptOptimizer.Core.Entities;
 using PromptOptimizer.Core.Interfaces;
-using PromptOptimizer.Infrastructure.Data;
-using System.Linq;
 
 namespace PromptOptimizer.Application.Services
 {
@@ -76,41 +74,6 @@ namespace PromptOptimizer.Application.Services
                 _logger.LogError(ex, "Error during login for username: {Username}", request.Username);
                 throw new InvalidOperationException("An error occurred during login");
             }
-        }
-
-        public async Task<TokenResponse> RefreshTokenAsync(RefreshTokenRequest request)
-        {
-            if (!_refreshTokens.TryGetValue(request.RefreshToken, out var tokenInfo))
-            {
-                throw new UnauthorizedAccessException("Invalid refresh token");
-            }
-
-            if (tokenInfo.ExpiryDate <= DateTime.UtcNow)
-            {
-                _refreshTokens.Remove(request.RefreshToken);
-                throw new UnauthorizedAccessException("Refresh token expired");
-            }
-
-            var user = await _context.Users.FindAsync(tokenInfo.UserId);
-            if (user == null || !user.IsActive)
-            {
-                throw new UnauthorizedAccessException("User not found or inactive");
-            }
-
-            // Remove old refresh token
-            _refreshTokens.Remove(request.RefreshToken);
-
-            // Generate new tokens
-            var newTokens = _jwtTokenService.GenerateTokens(user);
-
-            // Store new refresh token
-            _refreshTokens[newTokens.RefreshToken] = new RefreshTokenInfo
-            {
-                UserId = user.Id,
-                ExpiryDate = DateTime.UtcNow.AddDays(7)
-            };
-
-            return newTokens;
         }
 
         public Task LogoutAsync(string token)

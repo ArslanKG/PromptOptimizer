@@ -38,26 +38,6 @@ namespace PromptOptimizer.API.Controllers
             }
         }
 
-        [HttpPost("refresh")]
-        [AllowAnonymous]
-        public async Task<ActionResult<TokenResponse>> RefreshToken([FromBody] RefreshTokenRequest request)
-        {
-            try
-            {
-                var response = await _authService.RefreshTokenAsync(request);
-                return Ok(response);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return Unauthorized(new { message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error during token refresh");
-                return StatusCode(500, new { message = "An error occurred during token refresh" });
-            }
-        }
-
         [HttpPost("logout")]
         [Authorize]
         public async Task<IActionResult> Logout()

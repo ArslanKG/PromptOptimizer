@@ -1,15 +1,14 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace PromptOptimizer.Core.DTOs
+﻿namespace PromptOptimizer.Core.DTOs
 {
-    // Session related classes
     public class SessionResponse
     {
         public string SessionId { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
         public int MessageCount { get; set; }
         public bool IsActive { get; set; }
+        public DateTime LastActivityAt { get; set; }
+        public string Title { get; set; } = string.Empty;
+
     }
 
     public class ConversationHistoryResponse

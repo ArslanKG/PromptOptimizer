@@ -7,7 +7,6 @@ using Polly.Extensions.Http;
 using PromptOptimizer.Application.Services;
 using PromptOptimizer.Core.Interfaces;
 using PromptOptimizer.Infrastructure.Clients;
-using PromptOptimizer.Infrastructure.Data;
 using PromptOptimizer.Infrastructure.Services;
 using Serilog;
 using System.Text;
@@ -91,22 +90,28 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization();
+builder.Services.AddHttpContextAccessor();
 
 // Add HttpClient with Polly
 builder.Services.AddHttpClient<ICortexApiClient, CortexApiClient>()
     .AddPolicyHandler(GetRetryPolicy());
 
 // Register services
-builder.Services.AddSingleton<ISessionService, InMemorySessionService>();
+builder.Services.AddScoped<ISessionService, DatabaseSessionService>();
 builder.Services.AddScoped<IPromptOptimizerService, PromptOptimizerService>();
 builder.Services.AddScoped<IModelOrchestrator, ModelOrchestrator>();
 builder.Services.AddScoped<IOptimizationService, OptimizationService>();
 builder.Services.AddScoped<IPasswordHashingService, PasswordHashingService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<ISessionManagementService, SessionManagementService>();
+builder.Services.AddScoped<IValidationService, ValidationService>();
+builder.Services.AddScoped<IRateLimitService, RateLimitService>();
 
 // Add memory cache
 builder.Services.AddMemoryCache();
+
+builder.Services.AddScoped<ISessionCacheService, SessionCacheService>();
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -147,14 +152,14 @@ using (var scope = app.Services.CreateScope())
             var adminPassword = builder.Configuration["AdminSetup:Password"] ?? "ChangeThisPassword123!";
             var adminEmail = builder.Configuration["AdminSetup:Email"] ?? "admin@example.com";
 
-            context.Users.Add(new PromptOptimizer.Core.Entities.User
+            context.Users.Add(new User
             {
                 Username = "admin",
                 Email = adminEmail,
                 PasswordHash = passwordHashingService.HashPassword(adminPassword),
                 IsAdmin = true,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
             });
             await context.SaveChangesAsync();
             logger.LogInformation("Admin user created successfully");

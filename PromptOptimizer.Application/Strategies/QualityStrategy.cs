@@ -27,7 +27,6 @@ public class QualityStrategy : BaseStrategy
         Stopwatch.Start();
         try
         {
-            // Step 1: Optimize prompt
             var optimizationModel = "gpt-4o-mini";
             ModelsUsed.Add(optimizationModel);
 

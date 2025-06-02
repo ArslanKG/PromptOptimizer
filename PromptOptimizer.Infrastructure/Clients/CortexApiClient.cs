@@ -45,7 +45,8 @@ public class CortexApiClient : ICortexApiClient
             var json = JsonSerializer.Serialize(request, _jsonOptions);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            _logger.LogInformation("Sending request to CortexAPI with model: {Model}", request.Model);
+            _logger.LogInformation("Sending request to CortexAPI with model: {Model}, Messages count: {MessageCount}",
+                request.Model, request.Messages.Count);
 
             var response = await _httpClient.PostAsync(
                 "chat/completions",
