@@ -1,10 +1,9 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PromptOptimizer.Core.DTOs;
 using PromptOptimizer.Core.Interfaces;
-using System.Security.Claims;
 using PromptOptimizer.Core.Models;
-
 
 namespace PromptOptimizer.API.Controllers
 {

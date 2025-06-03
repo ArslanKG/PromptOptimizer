@@ -5,7 +5,6 @@ namespace PromptOptimizer.Tests
         [Fact]
         public void Test1()
         {
-
         }
     }
 }

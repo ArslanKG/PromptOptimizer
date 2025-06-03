@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.Logging;
-using Polly;
 using PromptOptimizer.Core.Constants;
 using PromptOptimizer.Core.DTOs;
 using PromptOptimizer.Core.Entities;

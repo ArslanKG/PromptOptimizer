@@ -12,6 +12,7 @@
         }
 
         public static ValidationResult Valid() => new(true);
+
         public static ValidationResult Invalid(string errorMessage) => new(false, errorMessage);
     }
 }

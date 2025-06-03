@@ -61,9 +61,9 @@ namespace PromptOptimizer.Application.Services
         {
             return operation.ToLower() switch
             {
-                "optimize" => 60,   
-                "session" => 120,    
-                "default" => 100,    
+                "optimize" => 60,
+                "session" => 120,
+                "default" => 100,
                 _ => 50
             };
         }

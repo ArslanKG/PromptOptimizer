@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.13.35919.96 d17.13
+VisualStudioVersion = 17.13.35919.96
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PromptOptimizer.Core", "PromptOptimizer.Core\PromptOptimizer.Core.csproj", "{E40B1E4E-3D4C-4A1C-941E-630CD2FA47F8}"
 EndProject
@@ -17,6 +17,9 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PromptOptimizer.Tests", "PromptOptimizer.Tests\PromptOptimizer.Tests.csproj", "{1824D54F-7E62-40D8-BFBC-C246AB8412AD}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
+	ProjectSection(SolutionItems) = preProject
+		mcp_context.md = mcp_context.md
+	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{2DC852EC-EAE8-4E0E-9E2F-6366925632A9}"
 EndProject

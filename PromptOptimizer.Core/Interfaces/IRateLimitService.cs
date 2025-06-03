@@ -3,6 +3,7 @@
     public interface IRateLimitService
     {
         Task<bool> CheckRateLimitAsync(int userId, string operation = "default");
+
         Task<RateLimitInfo> GetRateLimitInfoAsync(int userId, string operation = "default");
     }
 

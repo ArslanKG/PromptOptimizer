@@ -8,7 +8,6 @@
         public bool IsActive { get; set; }
         public DateTime LastActivityAt { get; set; }
         public string Title { get; set; } = string.Empty;
-
     }
 
     public class ConversationHistoryResponse
@@ -30,5 +29,4 @@
         public string Content { get; set; } = string.Empty;
         public DateTime Timestamp { get; set; }
     }
-
 }

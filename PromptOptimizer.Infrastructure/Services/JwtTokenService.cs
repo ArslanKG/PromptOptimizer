@@ -1,12 +1,11 @@
-﻿using Microsoft.Extensions.Configuration;
-using Microsoft.IdentityModel.Tokens;
-using PromptOptimizer.Core.DTOs;
-using PromptOptimizer.Core.Entities;
-using PromptOptimizer.Core.Interfaces;
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
+using PromptOptimizer.Core.DTOs;
+using PromptOptimizer.Core.Interfaces;
 
 namespace PromptOptimizer.Infrastructure.Services
 {

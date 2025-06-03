@@ -1,13 +1,14 @@
-﻿using PromptOptimizer.Core.DTOs;
-using PromptOptimizer.Core.Entities;
-using System.Security.Claims;
+﻿using System.Security.Claims;
+using PromptOptimizer.Core.DTOs;
 
 namespace PromptOptimizer.Core.Interfaces
 {
     public interface IJwtTokenService
     {
         TokenResponse GenerateTokens(User user);
+
         ClaimsPrincipal? ValidateToken(string token);
+
         string GetUserIdFromToken(string token);
     }
 }

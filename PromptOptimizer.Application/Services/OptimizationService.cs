@@ -1,8 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
-using PromptOptimizer.Core.Configuration;
 using PromptOptimizer.Core.Constants;
 using PromptOptimizer.Core.DTOs;
-using PromptOptimizer.Core.Entities;
 using PromptOptimizer.Core.Interfaces;
 
 namespace PromptOptimizer.Application.Services;

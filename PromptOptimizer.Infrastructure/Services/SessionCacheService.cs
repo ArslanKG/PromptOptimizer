@@ -1,11 +1,11 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using PromptOptimizer.Core.DTOs;
 using PromptOptimizer.Core.Entities;
 using PromptOptimizer.Core.Helpers;
 using PromptOptimizer.Core.Interfaces;
-using System.Text.Json;
 
 namespace PromptOptimizer.Infrastructure.Services
 {
@@ -89,7 +89,6 @@ namespace PromptOptimizer.Infrastructure.Services
             var session = await _sessionService.GetSessionAsync(sessionId);
             if (session == null) return;
 
-            // Messages'ı güncellenmiş JSON options ile serialize et
             session.Messages = messages;
             session.MessagesJson = JsonSerializer.Serialize(messages, JsonOptions);
             session.MessageCount = messages.Count;

@@ -1,8 +1,6 @@
-﻿using System;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using PromptOptimizer.Core.DTOs;
-using PromptOptimizer.Core.Entities;
 using PromptOptimizer.Core.Interfaces;
 
 namespace PromptOptimizer.Application.Services

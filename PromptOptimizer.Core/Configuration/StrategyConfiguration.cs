@@ -1,5 +1,4 @@
-﻿using System.Collections.Generic;
-using PromptOptimizer.Core.DTOs;
+﻿using PromptOptimizer.Core.DTOs;
 
 namespace PromptOptimizer.Core.Configuration
 {

@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -9,7 +10,6 @@ using PromptOptimizer.Core.Interfaces;
 using PromptOptimizer.Infrastructure.Clients;
 using PromptOptimizer.Infrastructure.Services;
 using Serilog;
-using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 

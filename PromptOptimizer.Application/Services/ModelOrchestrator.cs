@@ -85,7 +85,7 @@ public class ModelOrchestrator : IModelOrchestrator
                 {
                     Role = "assistant",
                     Content = response.FinalResponse,
-                    Model = modelsUsed.LastOrDefault(), 
+                    Model = modelsUsed.LastOrDefault(),
                     Timestamp = DateTime.UtcNow
                 });
             }
@@ -114,7 +114,6 @@ public class ModelOrchestrator : IModelOrchestrator
                 string.Join(", ", modelsUsed));
         }
     }
-
 
     private async Task<OptimizationResponse> CostEffectiveStrategyAsync(
     OptimizationRequest request,
@@ -329,6 +328,7 @@ public class ModelOrchestrator : IModelOrchestrator
             throw;
         }
     }
+
     private async Task<ChatCompletionRequest> BuildRequestWithContext(
         OptimizationRequest request,
         string prompt,
@@ -371,36 +371,6 @@ public class ModelOrchestrator : IModelOrchestrator
         }
 
         return chatRequest;
-    }
-
-    private ModelInfo SelectModelByStrategy(string strategy, string? optimizationType = null)
-    {
-        var availableModels = ModelInfo.EnabledModels
-            .Select(kvp => kvp.Value)
-            .ToList();
-
-        return strategy.ToLower() switch
-        {
-            "quality" => availableModels
-                .Where(m => m.Type == "advanced")
-                .OrderByDescending(m => m.Cost)
-                .FirstOrDefault() ?? availableModels.First(),
-
-            "speed" => availableModels
-                .Where(m => m.Type == "fast")
-                .OrderBy(m => m.Cost)
-                .FirstOrDefault() ?? availableModels.First(),
-
-            "cost_effective" => availableModels
-                .OrderBy(m => m.Cost)
-                .First(),
-
-            "consensus" => availableModels
-                .Where(m => m.Type == "balanced")
-                .FirstOrDefault() ?? availableModels.First(),
-
-            _ => availableModels.First()
-        };
     }
 
     private async Task<OptimizationResponse> SpeedStrategyAsync(

@@ -1,6 +1,5 @@
 ﻿using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-using PromptOptimizer.Core.Constants;
 using PromptOptimizer.Core.DTOs;
 using PromptOptimizer.Core.Interfaces;
 

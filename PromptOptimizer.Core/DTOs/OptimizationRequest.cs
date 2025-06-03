@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-
-namespace PromptOptimizer.Core.DTOs
+﻿namespace PromptOptimizer.Core.DTOs
 {
     public class OptimizationRequest
     {
@@ -9,8 +7,8 @@ namespace PromptOptimizer.Core.DTOs
         public string OptimizationType { get; set; } = "clarity";
         public List<string>? PreferredModels { get; set; }
         public string? SessionId { get; set; }
-        public bool EnableMemory { get; set; } = true; 
-        public int? ContextWindowSize { get; set; } = 10; 
+        public bool EnableMemory { get; set; } = true;
+        public int? ContextWindowSize { get; set; } = 10;
     }
 
     public class OptimizationResponse

@@ -1,8 +1,7 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 using PromptOptimizer.Core.DTOs;
-using PromptOptimizer.Core.Entities;
 using PromptOptimizer.Core.Interfaces;
-using System.Text.RegularExpressions;
 
 namespace PromptOptimizer.Application.Services
 {
