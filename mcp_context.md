@@ -24,25 +24,32 @@
 3. **Optimization Types:** Clarity, Technical, Creative, Analytical prompt optimizasyonu
 4. **Model Orchestration:** Farklı AI modelleri arasında akıllı seçim ve yönlendirme
 
+### 🌐 Public API
+5. **No-Auth Chat:** Authentication olmadan AI chat hizmeti
+6. **Cost-Effective Service:** Sadece GPT-4o-mini model kullanımı
+7. **IP-Based Rate Limiting:** Saatlik 30 request limiti (IP bazlı)
+8. **Memory-Free Operation:** Session tutmayan lightweight service
+9. **Fixed Parameters:** Temperature 0.7, MaxTokens 1000 (maliyet optimizasyonu)
+
 ### 🔐 Güvenlik & Kimlik Doğrulama
-5. **JWT Bearer Authentication:** Stateless, secure token-based authentication
-6. **User Management:** Admin/User role sistemi
-7. **Rate Limiting:** API abuse koruması ve kullanıcı bazlı kota yönetimi
-8. **Password Hashing:** BCrypt ile güvenli şifre saklama
+10. **JWT Bearer Authentication:** Stateless, secure token-based authentication
+11. **User Management:** Admin/User role sistemi
+12. **Rate Limiting:** API abuse koruması ve kullanıcı bazlı kota yönetimi
+13. **Password Hashing:** BCrypt ile güvenli şifre saklama
 
 ### 💬 Session & Context Management
-9. **Session-based Conversation:** Kullanıcıya özel oturum yönetimi
-10. **Context Preservation:** Konuşma geçmişi ve bağlam korunması
-11. **Session Title Generation:** AI tabanlı otomatik başlık oluşturma
-12. **Message History:** Tüm mesajların JSON formatında kalıcı saklanması
+14. **Session-based Conversation:** Kullanıcıya özel oturum yönetimi
+15. **Context Preservation:** Konuşma geçmişi ve bağlam korunması
+16. **Session Title Generation:** AI tabanlı otomatik başlık oluşturma
+17. **Message History:** Tüm mesajların JSON formatında kalıcı saklanması
 
 ### 🛠️ Teknik Özellikler
-13. **Clean Architecture:** Modüler ve sürdürülebilir kod yapısı
-14. **Entity Framework Core:** Database operations ve migrations
-15. **Serilog Logging:** Structured logging ve file output
-16. **Polly Resilience:** HTTP retry policies ve circuit breakers
-17. **Health Checks:** Sistem durumu monitoring
-18. **Swagger/OpenAPI:** İnteraktif API dokümantasyonu
+18. **Clean Architecture:** Modüler ve sürdürülebilir kod yapısı
+19. **Entity Framework Core:** Database operations ve migrations
+20. **Serilog Logging:** Structured logging ve file output
+21. **Polly Resilience:** HTTP retry policies ve circuit breakers
+22. **Health Checks:** Sistem durumu monitoring
+23. **Swagger/OpenAPI:** İnteraktif API dokümantasyonu
 
 ---
 
@@ -90,7 +97,8 @@ PromptOptimizer/
 ├── PromptOptimizer.API/                 # 🎯 Presentation Layer
 │   ├── Controllers/                     # API Controllers
 │   │   ├── AuthController.cs           # Authentication endpoints
-│   │   ├── ChatController.cs           # Chat ve strategy endpoints
+│   │   ├── ChatController.cs           # Chat ve strategy endpoints (Auth required)
+│   │   ├── PublicChatController.cs     # Public chat (No auth, GPT-4o-mini only)
 │   │   ├── SessionsController.cs       # Session management
 │   │   ├── SystemController.cs         # Health checks
 │   │   └── BaseApiController.cs        # Base controller functionality
@@ -201,10 +209,15 @@ ConversationSession.MessagesJson field contains:
 
 ### 🔐 Authentication
 - `POST /api/auth/login` - User login
-- `POST /api/auth/register` - User registration  
+- `POST /api/auth/register` - User registration
 - `POST /api/auth/logout` - User logout (Auth required)
 
-### 💬 Chat
+### 🌐 Public Chat (No Auth Required)
+- `POST /api/public/chat/send` - Public AI chat (GPT-4o-mini, 30 req/hour)
+- `GET /api/public/chat/rate-limit` - Get rate limit info
+- `GET /api/public/chat/info` - Public API information
+
+### 💬 Chat (Auth Required)
 - `POST /api/chat/send` - Send message to AI model (Auth required)
 - `POST /api/chat/strategy` - Send with strategy (Auth required)
 - `GET /api/chat/models` - Get available models (Auth required)
@@ -238,6 +251,7 @@ ConversationSession.MessagesJson field contains:
 - ✅ Error handling ve validation
 - ✅ Docker support preparation
 - ✅ Configuration management
+- ✅ **Public Chat API (No-Auth)** - GPT-4o-mini only, IP-based rate limiting (30/hour)
 
 ### 🔜 Yapılacaklar:
 - 🔄 Unit test coverage improvement

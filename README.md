@@ -27,6 +27,13 @@ PromptOptimizer, geliştiricilerin kendi projelerine entegre edebilecekleri kaps
 - ✅ **Real-time Chat**: Streaming response desteği
 - ✅ **Context Management**: Session bazlı konuşma geçmişi
 
+#### 🌐 Public API
+- ✅ **No-Auth Chat**: Authentication olmadan AI chat
+- ✅ **Cost-Effective**: Sadece GPT-4o-mini model
+- ✅ **Rate Limited**: Saatlik 30 request limiti
+- ✅ **IP-Based Limiting**: Client IP bazlı kontrol
+- ✅ **Memory-Free**: Session tutmayan lightweight service
+
 #### 🔐 Güvenlik & Authentication
 - ✅ **JWT Bearer Authentication**: Secure token-based auth
 - ✅ **User Management**: Admin/User role sistemi
@@ -270,6 +277,84 @@ Authorization: Bearer <token>
 ```
 
 ### 💬 Chat Endpoints
+
+#### POST `/api/public/chat/send`
+🌐 **No Auth Required** - Public AI chat (GPT-4o-mini, 30 req/hour)
+
+**Request:**
+```json
+{
+    "message": "Merhaba! Nasılsın?"
+}
+```
+
+**Response:**
+```json
+{
+    "message": "Merhaba! Ben bir AI asistanıyım ve iyiyim, teşekkür ederim.",
+    "model": "gpt-4o-mini",
+    "timestamp": "2024-12-01T12:00:00Z",
+    "usage": {
+        "promptTokens": 15,
+        "completionTokens": 25,
+        "totalTokens": 40
+    },
+    "success": true,
+    "remainingRequests": 28,
+    "resetTime": "2024-12-01T13:00:00Z"
+}
+```
+
+**Rate Limit Error (429):**
+```json
+{
+    "errorCode": "RATE_LIMIT_EXCEEDED",
+    "message": "Public API rate limit exceeded. 0 requests remaining. Resets at 13:00 UTC.",
+    "details": "Limit: 30/hour, Used: 30",
+    "timestamp": "2024-12-01T12:45:00Z"
+}
+```
+
+#### GET `/api/public/chat/rate-limit`
+🌐 **No Auth Required** - Rate limit bilgilerini getirir.
+
+**Response:**
+```json
+{
+    "requestCount": 15,
+    "limit": 30,
+    "remainingRequests": 15,
+    "resetTime": "2024-12-01T13:00:00Z",
+    "isLimitExceeded": false
+}
+```
+
+#### GET `/api/public/chat/info`
+🌐 **No Auth Required** - Public API hakkında bilgi.
+
+**Response:**
+```json
+{
+    "description": "Public Chat API - No authentication required",
+    "model": "gpt-4o-mini",
+    "rateLimit": {
+        "requests": 30,
+        "period": "1 hour",
+        "resetInterval": "Every hour at minute 0"
+    },
+    "features": {
+        "authentication": false,
+        "sessionMemory": false,
+        "costOptimized": true,
+        "maxTokens": 1000,
+        "temperature": 0.7
+    },
+    "limits": {
+        "maxMessageLength": 4000,
+        "maxTokensPerResponse": 1000
+    }
+}
+```
 
 #### POST `/api/chat/send`
 🔒 **Auth Required** - AI modeline mesaj gönderir.
@@ -848,7 +933,8 @@ PromptOptimizer/
 ├── PromptOptimizer.API/                 # Web API Layer
 │   ├── Controllers/                     # API Controllers
 │   │   ├── AuthController.cs           # Authentication endpoints
-│   │   ├── ChatController.cs           # Chat endpoints
+│   │   ├── ChatController.cs           # Chat endpoints (Auth required)
+│   │   ├── PublicChatController.cs     # Public chat (No auth)
 │   │   ├── SessionsController.cs       # Session management
 │   │   └── SystemController.cs         # System endpoints
 │   ├── Properties/
