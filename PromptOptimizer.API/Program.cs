@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -55,7 +55,6 @@ builder.Services.AddSwaggerGen(c =>
         Version = "v2.0",
         Description = "Simple AI Chat API with multi-model support and session management"
     });
-
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -65,7 +64,6 @@ builder.Services.AddSwaggerGen(c =>
         In = ParameterLocation.Header,
         Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\""
     });
-
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -145,11 +143,12 @@ builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 
 builder.Services.AddMemoryCache();
 
+// ✅ GÜNCELLENMIŞ CORS CONFIGURATION
 builder.Services.AddCors(options =>
 {
     if (builder.Environment.IsDevelopment())
     {
-        options.AddPolicy("Development", policy =>
+        options.AddPolicy("AllowFrontend", policy =>
         {
             policy.AllowAnyOrigin()
                   .AllowAnyMethod()
@@ -158,15 +157,17 @@ builder.Services.AddCors(options =>
     }
     else
     {
-        options.AddPolicy("Production", policy =>
+        options.AddPolicy("AllowFrontend", policy =>
         {
-            var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>()
-                               ?? new[] { "https://yourdomain.com" };
-            
-            policy.WithOrigins(allowedOrigins)
-                  .AllowAnyMethod()
-                  .AllowAnyHeader()
-                  .AllowCredentials();
+            policy.WithOrigins(
+                "https://arkeguai.vercel.app",      // ✅ Frontend URL'iniz
+                "https://*.vercel.app",             // ✅ Tüm Vercel subdomain'leri
+                "http://localhost:3000",            // ✅ Local development
+                "https://localhost:3000"            // ✅ Local HTTPS
+            )
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .SetIsOriginAllowedToAllowWildcardSubdomains(); // ✅ Wildcard subdomain desteği
         });
     }
 });
@@ -199,7 +200,6 @@ if (app.Environment.IsProduction())
     {
         Directory.CreateDirectory(dataPath);
     }
-    
     var logsPath = "/app/data/logs";
     if (!Directory.Exists(logsPath))
     {
@@ -222,7 +222,6 @@ using (var scope = app.Services.CreateScope())
         {
             logger.LogInformation("Creating admin user...");
             var passwordHashingService = scope.ServiceProvider.GetRequiredService<IPasswordHashingService>();
-
             var adminPassword = builder.Configuration["AdminSetup:Password"] ?? "ChangeThisPassword123!";
             var adminEmail = builder.Configuration["AdminSetup:Email"] ?? "admin@example.com";
 
@@ -276,18 +275,12 @@ if (app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
-// Use environment-specific CORS policy
-if (app.Environment.IsDevelopment())
-{
-    app.UseCors("Development");
-}
-else
-{
-    app.UseCors("Production");
-}
+// ✅ GÜNCELLENMIŞ CORS KULLANIMI
+app.UseCors("AllowFrontend");
 
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 
 // Add health check endpoints
@@ -316,10 +309,16 @@ app.Lifetime.ApplicationStarted.Register(() =>
     logger.LogInformation("Available endpoints:");
     logger.LogInformation("   - POST   /api/auth/login");
     logger.LogInformation("   - POST   /api/auth/register");
-    logger.LogInformation("   - POST   /api/chat/send");      
-    logger.LogInformation("   - GET    /api/chat/models");        
-    logger.LogInformation("   - GET    /api/chat/sessions");       
-    logger.LogInformation("   - GET    /api/chat/health");         
+    logger.LogInformation("   - POST   /api/chat/send");
+    logger.LogInformation("   - POST   /api/public/chat/send");  // ✅ Public endpoint eklendi
+    logger.LogInformation("   - GET    /api/chat/models");
+    logger.LogInformation("   - GET    /api/chat/sessions");
+    logger.LogInformation("   - GET    /api/system/health");
+    logger.LogInformation("========================================");
+    logger.LogInformation("🌐 CORS enabled for:");
+    logger.LogInformation("   - https://arkeguai.vercel.app");
+    logger.LogInformation("   - https://*.vercel.app");
+    logger.LogInformation("   - http://localhost:3000");
     logger.LogInformation("========================================");
     logger.LogInformation("Press Ctrl+C to shut down");
 });
