@@ -6,9 +6,12 @@ using Microsoft.OpenApi.Models;
 using Polly;
 using Polly.Extensions.Http;
 using PromptOptimizer.Application.Services;
+using PromptOptimizer.Core.Configuration;
 using PromptOptimizer.Core.Interfaces;
 using PromptOptimizer.Infrastructure.Clients;
+using PromptOptimizer.Infrastructure.Data;
 using PromptOptimizer.Infrastructure.Services;
+using PromptOptimizer.API.Middleware;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,6 +22,22 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
+// Configure Strategy Configuration
+builder.Services.Configure<StrategyConfiguration>(
+    builder.Configuration.GetSection("StrategyConfiguration"));
+
+// If not configured in appsettings, use default
+if (!builder.Configuration.GetSection("StrategyConfiguration").Exists())
+{
+    builder.Services.Configure<StrategyConfiguration>(options =>
+    {
+        var defaultConfig = StrategyConfiguration.GetDefault();
+        options.Strategies = defaultConfig.Strategies;
+        options.OptimizationTypes = defaultConfig.OptimizationTypes;
+        options.ModelStrategies = defaultConfig.ModelStrategies;
+    });
+}
 
 // Configure Swagger with JWT support
 builder.Services.AddSwaggerGen(c =>
@@ -61,7 +80,14 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 var jwtSecretKey = builder.Configuration["Jwt:SecretKey"] ??
     throw new InvalidOperationException("JWT SecretKey is not configured");
-var key = Encoding.ASCII.GetBytes(jwtSecretKey);
+
+// Validate JWT secret key length for security
+if (jwtSecretKey.Length < 32)
+{
+    throw new InvalidOperationException("JWT Secret key must be at least 32 characters for security");
+}
+
+var key = Encoding.UTF8.GetBytes(jwtSecretKey);
 
 builder.Services.AddAuthentication(options =>
 {
@@ -90,7 +116,8 @@ builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddHttpClient<ICortexApiClient, CortexApiClient>(client =>
 {
-    client.Timeout = TimeSpan.FromSeconds(30);
+    var timeoutSeconds = builder.Configuration.GetValue<int>("HttpClient:TimeoutSeconds", 30);
+    client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
     client.DefaultRequestHeaders.Add("Connection", "keep-alive");
 })
 .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
@@ -113,13 +140,28 @@ builder.Services.AddMemoryCache();
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll",
-        builder =>
+    if (builder.Environment.IsDevelopment())
+    {
+        options.AddPolicy("Development", policy =>
         {
-            builder.AllowAnyOrigin()
-                   .AllowAnyMethod()
-                   .AllowAnyHeader();
+            policy.AllowAnyOrigin()
+                  .AllowAnyMethod()
+                  .AllowAnyHeader();
         });
+    }
+    else
+    {
+        options.AddPolicy("Production", policy =>
+        {
+            var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>()
+                               ?? new[] { "https://yourdomain.com" };
+            
+            policy.WithOrigins(allowedOrigins)
+                  .AllowAnyMethod()
+                  .AllowAnyHeader()
+                  .AllowCredentials();
+        });
+    }
 });
 
 var app = builder.Build();
@@ -174,8 +216,21 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// Global exception handling middleware (should be early in pipeline)
+app.UseMiddleware<GlobalExceptionMiddleware>();
+
 app.UseHttpsRedirection();
-app.UseCors("AllowAll");
+
+// Use environment-specific CORS policy
+if (app.Environment.IsDevelopment())
+{
+    app.UseCors("Development");
+}
+else
+{
+    app.UseCors("Production");
+}
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

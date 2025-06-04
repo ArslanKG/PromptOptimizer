@@ -1,7 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using PromptOptimizer.Core.DTOs;
+using PromptOptimizer.Core.Entities;
 using PromptOptimizer.Core.Interfaces;
+using PromptOptimizer.Infrastructure.Data;
 
 namespace PromptOptimizer.Application.Services
 {
@@ -11,7 +13,6 @@ namespace PromptOptimizer.Application.Services
         private readonly IPasswordHashingService _passwordHashingService;
         private readonly IJwtTokenService _jwtTokenService;
         private readonly ILogger<AuthService> _logger;
-        private readonly Dictionary<string, RefreshTokenInfo> _refreshTokens = new();
 
         public AuthService(
             AppDbContext context,
@@ -40,13 +41,16 @@ namespace PromptOptimizer.Application.Services
 
                 var tokenResponse = _jwtTokenService.GenerateTokens(user);
 
-                // Store refresh token
-                _refreshTokens[tokenResponse.RefreshToken] = new RefreshTokenInfo
+                // Store refresh token in database
+                var refreshToken = new RefreshToken
                 {
+                    Token = tokenResponse.RefreshToken,
                     UserId = user.Id,
-                    ExpiryDate = DateTime.UtcNow.AddDays(7)
+                    ExpiryDate = DateTime.UtcNow.AddDays(7),
+                    CreatedAt = DateTime.UtcNow
                 };
 
+                _context.RefreshTokens.Add(refreshToken);
                 user.LastLoginAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
 
@@ -74,18 +78,37 @@ namespace PromptOptimizer.Application.Services
             }
         }
 
-        public Task LogoutAsync(string token)
+        public async Task LogoutAsync(string token)
         {
-            // In a production app, you might want to blacklist the token
-            // For now, we'll just remove the refresh token if it exists
-            var refreshToken = _refreshTokens.FirstOrDefault(x => x.Value.UserId.ToString() == _jwtTokenService.GetUserIdFromToken(token)).Key;
-            if (!string.IsNullOrEmpty(refreshToken))
+            try
             {
-                _refreshTokens.Remove(refreshToken);
-            }
+                var userId = _jwtTokenService.GetUserIdFromToken(token);
+                if (!string.IsNullOrEmpty(userId) && int.TryParse(userId, out var userIdInt))
+                {
+                    // Revoke all active refresh tokens for this user
+                    var refreshTokens = await _context.RefreshTokens
+                        .Where(rt => rt.UserId == userIdInt && rt.IsActive)
+                        .ToListAsync();
 
-            _logger.LogInformation("User logged out");
-            return Task.CompletedTask;
+                    foreach (var refreshToken in refreshTokens)
+                    {
+                        refreshToken.IsRevoked = true;
+                        refreshToken.RevokedAt = DateTime.UtcNow;
+                    }
+
+                    await _context.SaveChangesAsync();
+                    _logger.LogInformation("User {UserId} logged out - {TokenCount} refresh tokens revoked",
+                        userIdInt, refreshTokens.Count);
+                }
+                else
+                {
+                    _logger.LogWarning("Invalid token provided for logout");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during logout");
+            }
         }
 
         public async Task<RegisterResponse> RegisterAsync(RegisterRequest request)
@@ -138,10 +161,5 @@ namespace PromptOptimizer.Application.Services
             }
         }
 
-        private class RefreshTokenInfo
-        {
-            public int UserId { get; set; }
-            public DateTime ExpiryDate { get; set; }
-        }
     }
 }

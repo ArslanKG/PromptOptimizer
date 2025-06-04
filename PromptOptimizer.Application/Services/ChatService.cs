@@ -1,5 +1,7 @@
 ﻿// PromptOptimizer.Application/Services/ChatService.cs
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using PromptOptimizer.Core.Configuration;
 using PromptOptimizer.Core.DTOs;
 using PromptOptimizer.Core.Entities;
 using PromptOptimizer.Core.Interfaces;
@@ -12,16 +14,7 @@ namespace PromptOptimizer.Application.Services
         private readonly ISessionService _sessionService;
         private readonly ISessionTitleGenerator _titleGenerator;
         private readonly ILogger<ChatService> _logger;
-
-        private static readonly Dictionary<string, ModelConfig> ModelStrategies = new()
-        {
-            ["quality"] = new() { Name = "gpt-4o", Temperature = 0.7, MaxTokens = 2000 },
-            ["speed"] = new() { Name = "gpt-4o-mini", Temperature = 0.5, MaxTokens = 1000 },
-            ["cost_effective"] = new() { Name = "gemini-lite", Temperature = 0.7, MaxTokens = 1500 },
-            ["reasoning"] = new() { Name = "deepseek-r1", Temperature = 0.3, MaxTokens = 2000 },
-            ["creative"] = new() { Name = "grok-2", Temperature = 0.8, MaxTokens = 1800 },
-            ["default"] = new() { Name = "gpt-4o-mini", Temperature = 0.5, MaxTokens = 1500 }
-        };
+        private readonly StrategyConfiguration _strategyConfig;
 
 
         // PromptOptimizer.Application/Services/ChatService.cs - Update SupportedModels
@@ -49,11 +42,13 @@ namespace PromptOptimizer.Application.Services
             ICortexApiClient cortexClient,
             ISessionService sessionService,
             ISessionTitleGenerator titleGenerator,
+            IOptions<StrategyConfiguration> strategyOptions,
             ILogger<ChatService> logger)
         {
             _cortexClient = cortexClient;
             _sessionService = sessionService;
             _titleGenerator = titleGenerator;
+            _strategyConfig = strategyOptions.Value;
             _logger = logger;
         }
 
@@ -266,19 +261,6 @@ namespace PromptOptimizer.Application.Services
             return assistantMessage;
         }
 
-        private async Task SaveConversationMessages(string sessionId, string userMessage, string assistantMessage)
-        {
-            try
-            {
-                await _sessionService.AddMessageAsync(sessionId, "user", userMessage);
-                await _sessionService.AddMessageAsync(sessionId, "assistant", assistantMessage);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to save messages for session {SessionId}", sessionId);
-                throw;
-            }
-        }
 
         private async Task<string?> GenerateAndUpdateSessionTitle(string sessionId, string firstMessage)
         {
@@ -313,7 +295,8 @@ namespace PromptOptimizer.Application.Services
 
         private ModelConfig GetModelConfigForStrategy(string strategy)
         {
-            return ModelStrategies.GetValueOrDefault(strategy.ToLower(), ModelStrategies["default"]);
+            return _strategyConfig.ModelStrategies.GetValueOrDefault(strategy.ToLower(),
+                _strategyConfig.ModelStrategies["default"]);
         }
     }
 }

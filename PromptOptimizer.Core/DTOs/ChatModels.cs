@@ -44,12 +44,22 @@ namespace PromptOptimizer.Core.DTOs
 
     public class ErrorResponse
     {
+        public string ErrorCode { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;
         public string? Details { get; set; }
         public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 
+        public ErrorResponse(string errorCode, string message, string? details = null)
+        {
+            ErrorCode = errorCode;
+            Message = message;
+            Details = details;
+        }
+
+        // Backward compatibility constructor
         public ErrorResponse(string message, string? details = null)
         {
+            ErrorCode = "GENERIC_ERROR";
             Message = message;
             Details = details;
         }

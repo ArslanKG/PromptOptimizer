@@ -1,7 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using PromptOptimizer.Core.Entities;
 
-public class AppDbContext : DbContext
+namespace PromptOptimizer.Infrastructure.Data
+{
+    public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
@@ -9,6 +11,7 @@ public class AppDbContext : DbContext
 
     public DbSet<User> Users { get; set; } = null!;
     public DbSet<ConversationSession> Sessions { get; set; } = null!;
+    public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -41,5 +44,22 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => e.CreatedAt);
         });
+    
+        // RefreshToken configuration
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.HasKey(e => e.Token);
+            entity.Property(e => e.Token).HasMaxLength(200);
+    
+            entity.HasOne(e => e.User)
+                .WithMany()
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+    
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.ExpiryDate);
+            entity.HasIndex(e => e.IsRevoked);
+        });
+    }
     }
 }

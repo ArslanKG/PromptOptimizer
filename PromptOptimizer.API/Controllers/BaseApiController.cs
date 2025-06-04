@@ -17,15 +17,25 @@ namespace PromptOptimizer.API.Controllers
         }
 
         protected IActionResult UnauthorizedResult() =>
-            Unauthorized(new ErrorResponse("Authentication required"));
+            Unauthorized(new ErrorResponse("AUTH_REQUIRED", "Authentication required"));
 
         protected IActionResult RateLimitResult() =>
-            StatusCode(429, new ErrorResponse("Rate limit exceeded"));
+            StatusCode(429, new ErrorResponse("RATE_LIMIT_EXCEEDED", "Rate limit exceeded. Please try again later."));
 
-        protected IActionResult ValidationError(string message) =>
-            BadRequest(new ErrorResponse(message));
+        protected IActionResult ValidationError(string message, string? errorCode = null) =>
+            BadRequest(new ErrorResponse(errorCode ?? "VALIDATION_ERROR", message));
 
-        protected IActionResult ServiceError(string message = "Service temporarily unavailable") =>
-            StatusCode(500, new ErrorResponse(message));
+        protected IActionResult ServiceError(string? errorCode = null, string? details = null, bool logDetails = true)
+        {
+            var response = new ErrorResponse(
+                errorCode ?? "SERVICE_ERROR",
+                "Service temporarily unavailable",
+                logDetails ? details : null
+            );
+            return StatusCode(500, response);
+        }
+
+        protected IActionResult NotFoundError(string resource, string identifier) =>
+            NotFound(new ErrorResponse("RESOURCE_NOT_FOUND", $"{resource} with identifier '{identifier}' was not found"));
     }
 }

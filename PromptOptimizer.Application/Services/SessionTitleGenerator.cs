@@ -61,14 +61,14 @@ namespace PromptOptimizer.Application.Services
 
                 if (IsQuestion(message))
                 {
-                    var questionTitle = GenerateQuestionTitle(firstMessage);
+                    var questionTitle = GenerateQuestionTitle(message);
                     if (!string.IsNullOrEmpty(questionTitle))
                     {
                         return $"❓ {questionTitle}";
                     }
                 }
 
-                return GenerateFallbackTitle(firstMessage);
+                return GenerateFallbackTitle(message);
             }
             catch (Exception ex)
             {

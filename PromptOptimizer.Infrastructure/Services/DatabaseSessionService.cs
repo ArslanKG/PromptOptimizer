@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using PromptOptimizer.Core.DTOs;
 using PromptOptimizer.Core.Entities;
 using PromptOptimizer.Core.Interfaces;
+using PromptOptimizer.Infrastructure.Data;
 
 namespace PromptOptimizer.Infrastructure.Services
 {
@@ -278,12 +279,34 @@ namespace PromptOptimizer.Infrastructure.Services
         {
             if (userId.HasValue && userId.Value > 0)
             {
-                var userExists = await _context.Users.AnyAsync(u => u.Id == userId.Value);
-                if (userExists) return userId.Value;
+                var userExists = await _context.Users.AnyAsync(u => u.Id == userId.Value && u.IsActive);
+                if (userExists)
+                {
+                    _logger.LogDebug("Using provided user ID: {UserId}", userId.Value);
+                    return userId.Value;
+                }
+                
+                _logger.LogWarning("Provided user ID {UserId} not found or inactive", userId.Value);
+                throw new InvalidOperationException($"User with ID {userId.Value} not found or inactive");
             }
 
-            var adminUser = await _context.Users.FirstOrDefaultAsync(u => u.IsAdmin);
-            return adminUser?.Id ?? throw new InvalidOperationException("No admin user found");
+            // For anonymous sessions, try to use a system/default user
+            var systemUser = await _context.Users.FirstOrDefaultAsync(u => u.Username == "system" && u.IsActive);
+            if (systemUser != null)
+            {
+                _logger.LogDebug("Using system user for anonymous session");
+                return systemUser.Id;
+            }
+
+            // Last resort: use admin user but log it as a warning
+            var adminUser = await _context.Users.FirstOrDefaultAsync(u => u.IsAdmin && u.IsActive);
+            if (adminUser != null)
+            {
+                _logger.LogWarning("No user ID provided and no system user found. Using admin user for session.");
+                return adminUser.Id;
+            }
+
+            throw new InvalidOperationException("No valid user found. Please provide a valid user ID or ensure system/admin users exist.");
         }
 
         private ConversationSession MapEntityToSession(ConversationSession sessionEntity)

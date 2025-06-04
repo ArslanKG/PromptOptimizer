@@ -6,6 +6,7 @@ namespace PromptOptimizer.Core.Configuration
     {
         public List<StrategyInfo> Strategies { get; set; } = new();
         public List<OptimizationType> OptimizationTypes { get; set; } = new();
+        public Dictionary<string, ModelConfig> ModelStrategies { get; set; } = new();
 
         public static StrategyConfiguration GetDefault()
         {
@@ -37,6 +38,16 @@ namespace PromptOptimizer.Core.Configuration
                         Description = "Uygun maliyetli çözüm",
                         EstimatedTime = "5-10 saniye"
                     }
+                },
+                ModelStrategies = new Dictionary<string, ModelConfig>
+                {
+                    ["quality"] = new() { Name = "gpt-4o", Temperature = 0.7, MaxTokens = 2000 },
+                    ["speed"] = new() { Name = "gpt-4o-mini", Temperature = 0.5, MaxTokens = 1000 },
+                    ["cost_effective"] = new() { Name = "gpt-4o-mini", Temperature = 0.7, MaxTokens = 1500 },
+                    ["reasoning"] = new() { Name = "deepseek-r1", Temperature = 0.3, MaxTokens = 2000 },
+                    ["creative"] = new() { Name = "grok-2", Temperature = 0.8, MaxTokens = 1800 },
+                    ["consensus"] = new() { Name = "gpt-4o", Temperature = 0.6, MaxTokens = 1800 },
+                    ["default"] = new() { Name = "gpt-4o-mini", Temperature = 0.5, MaxTokens = 1500 }
                 },
                 OptimizationTypes = new List<OptimizationType>
                 {
