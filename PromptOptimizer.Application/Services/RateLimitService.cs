@@ -64,8 +64,60 @@ namespace PromptOptimizer.Application.Services
                 "optimize" => 60,
                 "session" => 120,
                 "default" => 100,
+                "public_chat" => 30, // Saatlik 30 request public API için
                 _ => 50
             };
+        }
+
+        // Public API için IP bazlı rate limiting
+        public Task<bool> CheckPublicRateLimitAsync(string ipAddress)
+        {
+            var currentHour = DateTime.UtcNow.ToString("yyyy-MM-dd-HH");
+            var key = $"public_rate_limit_{ipAddress}_{currentHour}";
+            
+            const int hourlyLimit = 30; // Saatlik limit
+
+            if (_cache.TryGetValue(key, out int requestCount))
+            {
+                if (requestCount >= hourlyLimit)
+                {
+                    _logger.LogWarning("Public API rate limit exceeded for IP {IpAddress}", ipAddress);
+                    return Task.FromResult(false);
+                }
+                _cache.Set(key, requestCount + 1, TimeSpan.FromHours(1));
+            }
+            else
+            {
+                _cache.Set(key, 1, TimeSpan.FromHours(1));
+            }
+
+            _logger.LogDebug("Public API request {Count}/{Limit} for IP {IpAddress}",
+                requestCount + 1, hourlyLimit, ipAddress);
+
+            return Task.FromResult(true);
+        }
+
+        // Public API için rate limit bilgisi
+        public Task<PublicRateLimitInfo> GetPublicRateLimitInfoAsync(string ipAddress)
+        {
+            var currentHour = DateTime.UtcNow.ToString("yyyy-MM-dd-HH");
+            var key = $"public_rate_limit_{ipAddress}_{currentHour}";
+            
+            const int hourlyLimit = 30;
+            var requestCount = _cache.TryGetValue(key, out int count) ? count : 0;
+            var remainingRequests = Math.Max(0, hourlyLimit - requestCount);
+            
+            // Bir sonraki saatin başını hesapla
+            var nextHour = DateTime.UtcNow.AddHours(1);
+            var resetTime = new DateTime(nextHour.Year, nextHour.Month, nextHour.Day, nextHour.Hour, 0, 0, DateTimeKind.Utc);
+
+            return Task.FromResult(new PublicRateLimitInfo
+            {
+                RequestCount = requestCount,
+                Limit = hourlyLimit,
+                RemainingRequests = remainingRequests,
+                ResetTime = resetTime
+            });
         }
     }
 }

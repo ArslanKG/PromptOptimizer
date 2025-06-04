@@ -71,4 +71,25 @@ namespace PromptOptimizer.Core.DTOs
         public double Temperature { get; set; }
         public int MaxTokens { get; set; }
     }
+
+    // Public API DTOs - Auth olmadan kullanım için
+    public class PublicChatRequest
+    {
+        public string Message { get; set; } = string.Empty;
+        // Model fixed: sadece gpt-4o-mini
+        // Session yok: memory tutmuyor
+        // Temperature fixed: 0.7 (cost-effective)
+        // MaxTokens fixed: 1000 (cost-effective)
+    }
+
+    public class PublicChatResponse
+    {
+        public string Message { get; set; } = string.Empty;
+        public string Model { get; set; } = "gpt-4o-mini";
+        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+        public Usage? Usage { get; set; }
+        public bool Success { get; set; } = true;
+        public int RemainingRequests { get; set; }
+        public DateTime ResetTime { get; set; }
+    }
 }

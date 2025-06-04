@@ -298,5 +298,66 @@ namespace PromptOptimizer.Application.Services
             return _strategyConfig.ModelStrategies.GetValueOrDefault(strategy.ToLower(),
                 _strategyConfig.ModelStrategies["default"]);
         }
+
+        // Public API için özel chat method - auth olmadan, memory tutmadan
+        public async Task<PublicChatResponse> SendPublicMessageAsync(
+            string message,
+            CancellationToken cancellationToken = default)
+        {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            try
+            {
+                _logger.LogInformation("Processing public chat request - Message length: {Length}", message.Length);
+
+                // Fixed parameters for cost-effective usage
+                const string model = "gpt-4o-mini";
+                const double temperature = 0.7;
+                const int maxTokens = 1000;
+
+                // Basit context - sadece current message, memory yok
+                var contextMessages = new List<ChatMessage>
+                {
+                    new() { Role = "user", Content = message }
+                };
+
+                var aiRequest = new ChatCompletionRequest
+                {
+                    Model = model,
+                    Messages = contextMessages,
+                    Temperature = temperature,
+                    MaxTokens = maxTokens
+                };
+
+                var aiCallStart = stopwatch.ElapsedMilliseconds;
+                var aiResponse = await _cortexClient.CreateChatCompletionAsync(aiRequest, cancellationToken);
+                var aiCallTime = stopwatch.ElapsedMilliseconds - aiCallStart;
+
+                _logger.LogInformation("Public API call took {Ms}ms", aiCallTime);
+
+                var assistantMessage = ExtractAssistantMessage(aiResponse);
+
+                stopwatch.Stop();
+                _logger.LogInformation("Total public request time: {Ms}ms (AI: {AiMs}ms)",
+                    stopwatch.ElapsedMilliseconds, aiCallTime);
+
+                return new PublicChatResponse
+                {
+                    Message = assistantMessage,
+                    Model = model,
+                    Usage = aiResponse.Usage,
+                    Success = true,
+                    // Rate limit bilgileri controller'da set edilecek
+                    RemainingRequests = 0,
+                    ResetTime = DateTime.UtcNow
+                };
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                _logger.LogError(ex, "Public chat failed after {Ms}ms", stopwatch.ElapsedMilliseconds);
+                throw;
+            }
+        }
     }
 }

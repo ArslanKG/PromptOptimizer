@@ -11,7 +11,7 @@ namespace PromptOptimizer.Core.Interfaces
             string? sessionId = null,
             double temperature = 0.7,
             int? maxTokens = null,
-            int? userId = null, 
+            int? userId = null,
             CancellationToken cancellationToken = default);
 
         Task<ChatResponse> SendMessageWithStrategyAsync(
@@ -24,5 +24,10 @@ namespace PromptOptimizer.Core.Interfaces
         Task<List<AvailableModel>> GetAvailableModelsAsync();
 
         Task<bool> ValidateModelAsync(string modelName);
+
+        // Public API için auth olmadan kullanım
+        Task<PublicChatResponse> SendPublicMessageAsync(
+            string message,
+            CancellationToken cancellationToken = default);
     }
 }
