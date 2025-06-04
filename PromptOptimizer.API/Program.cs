@@ -13,8 +13,15 @@ using PromptOptimizer.Infrastructure.Data;
 using PromptOptimizer.Infrastructure.Services;
 using PromptOptimizer.API.Middleware;
 using Serilog;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure port for Render.com
+if (builder.Environment.IsProduction())
+{
+    builder.WebHost.UseUrls("http://*:10000");
+}
 
 builder.Host.UseSerilog((context, services, configuration) => configuration
     .ReadFrom.Configuration(context.Configuration)
@@ -164,7 +171,41 @@ builder.Services.AddCors(options =>
     }
 });
 
+// Add health checks
+builder.Services.AddHealthChecks()
+    .AddCheck("database", () =>
+    {
+        try
+        {
+            using var scope = builder.Services.BuildServiceProvider().CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            context.Database.CanConnect();
+            return HealthCheckResult.Healthy("Database connection successful");
+        }
+        catch (Exception ex)
+        {
+            return HealthCheckResult.Unhealthy("Database connection failed", ex);
+        }
+    })
+    .AddCheck("self", () => HealthCheckResult.Healthy("API is running"));
+
 var app = builder.Build();
+
+// Ensure data directory exists for production
+if (app.Environment.IsProduction())
+{
+    var dataPath = "/app/data";
+    if (!Directory.Exists(dataPath))
+    {
+        Directory.CreateDirectory(dataPath);
+    }
+    
+    var logsPath = "/app/data/logs";
+    if (!Directory.Exists(logsPath))
+    {
+        Directory.CreateDirectory(logsPath);
+    }
+}
 
 using (var scope = app.Services.CreateScope())
 {
@@ -215,11 +256,25 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+else
+{
+    // Enable Swagger in production for Render.com
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "PromptOptimizer API v2.0");
+        c.RoutePrefix = "swagger";
+    });
+}
 
 // Global exception handling middleware (should be early in pipeline)
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
-app.UseHttpsRedirection();
+// Only use HTTPS redirection in development (Render.com handles HTTPS)
+if (app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 // Use environment-specific CORS policy
 if (app.Environment.IsDevelopment())
@@ -234,6 +289,10 @@ else
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// Add health check endpoints
+app.MapHealthChecks("/health");
+app.MapHealthChecks("/api/system/health");
 
 app.Lifetime.ApplicationStarted.Register(() =>
 {
