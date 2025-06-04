@@ -10,6 +10,7 @@
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Handlers\" />
+    <Folder Include="Strategies\" />
     <Folder Include="Validators\" />
   </ItemGroup>
   <ItemGroup>

@@ -13,12 +13,10 @@ using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Serilog'u doðru þekilde yapýlandýr - sadece bir kez
 builder.Host.UseSerilog((context, services, configuration) => configuration
     .ReadFrom.Configuration(context.Configuration)
     .Enrich.FromLogContext());
 
-// Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
@@ -27,12 +25,11 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
     {
-        Title = "PromptOptimizer API",
-        Version = "v1",
-        Description = "Multi-model AI prompt optimization API with authentication"
+        Title = "AI Chat API",
+        Version = "v2.0",
+        Description = "Simple AI Chat API with multi-model support and session management"
     });
 
-    // Add JWT Authentication
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -59,12 +56,11 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Add DbContext
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Configure JWT Authentication
-var jwtSecretKey = builder.Configuration["Jwt:SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey is not configured");
+var jwtSecretKey = builder.Configuration["Jwt:SecretKey"] ??
+    throw new InvalidOperationException("JWT SecretKey is not configured");
 var key = Encoding.ASCII.GetBytes(jwtSecretKey);
 
 builder.Services.AddAuthentication(options =>
@@ -74,7 +70,7 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = false; // Set to true in production
+    options.RequireHttpsMetadata = false;
     options.SaveToken = true;
     options.TokenValidationParameters = new TokenValidationParameters
     {
@@ -92,28 +88,29 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
 
-// Add HttpClient with Polly
-builder.Services.AddHttpClient<ICortexApiClient, CortexApiClient>()
-    .AddPolicyHandler(GetRetryPolicy());
+builder.Services.AddHttpClient<ICortexApiClient, CortexApiClient>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.Add("Connection", "keep-alive");
+})
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    MaxConnectionsPerServer = 10,
+})
+.AddPolicyHandler(GetRetryPolicy());
 
-// Register services
+builder.Services.AddScoped<IChatService, ChatService>();
 builder.Services.AddScoped<ISessionService, DatabaseSessionService>();
-builder.Services.AddScoped<IPromptOptimizerService, PromptOptimizerService>();
-builder.Services.AddScoped<IModelOrchestrator, ModelOrchestrator>();
-builder.Services.AddScoped<IOptimizationService, OptimizationService>();
-builder.Services.AddScoped<IPasswordHashingService, PasswordHashingService>();
-builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<ISessionManagementService, SessionManagementService>();
 builder.Services.AddScoped<IValidationService, ValidationService>();
 builder.Services.AddScoped<IRateLimitService, RateLimitService>();
+builder.Services.AddScoped<ICortexApiClient, CortexApiClient>();
+builder.Services.AddScoped<ISessionTitleGenerator, SessionTitleGenerator>();
+builder.Services.AddScoped<IPasswordHashingService, PasswordHashingService>();
+builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 
-// Add memory cache
 builder.Services.AddMemoryCache();
 
-builder.Services.AddScoped<ISessionCacheService, SessionCacheService>();
-
-// Add CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll",
@@ -127,8 +124,6 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Ensure database is created and seeded
-// Ensure database is created and seeded
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -137,10 +132,7 @@ using (var scope = app.Services.CreateScope())
     try
     {
         logger.LogInformation("Initializing database...");
-
-        // Migration'larý uygula
         context.Database.Migrate();
-
         logger.LogInformation("Database initialized successfully");
 
         if (!context.Users.Any(u => u.Username == "admin"))
@@ -148,7 +140,6 @@ using (var scope = app.Services.CreateScope())
             logger.LogInformation("Creating admin user...");
             var passwordHashingService = scope.ServiceProvider.GetRequiredService<IPasswordHashingService>();
 
-            // Þifre configuration'dan alýnsýn
             var adminPassword = builder.Configuration["AdminSetup:Password"] ?? "ChangeThisPassword123!";
             var adminEmail = builder.Configuration["AdminSetup:Email"] ?? "admin@example.com";
 
@@ -161,6 +152,7 @@ using (var scope = app.Services.CreateScope())
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
             });
+
             await context.SaveChangesAsync();
             logger.LogInformation("Admin user created successfully");
             logger.LogWarning("Default admin credentials are being used. Please change them in production!");
@@ -176,7 +168,6 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -189,7 +180,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// Add startup complete message
 app.Lifetime.ApplicationStarted.Register(() =>
 {
     var logger = app.Services.GetRequiredService<ILogger<Program>>();
@@ -197,7 +187,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     var env = app.Environment.EnvironmentName;
 
     logger.LogInformation("========================================");
-    logger.LogInformation("PromptOptimizer API started successfully!");
+    logger.LogInformation("AI Chat API started successfully!");
     logger.LogInformation($"Environment: {env}");
     logger.LogInformation("Listening on:");
     foreach (var url in urls)
@@ -212,16 +202,17 @@ app.Lifetime.ApplicationStarted.Register(() =>
     logger.LogInformation("Available endpoints:");
     logger.LogInformation("   - POST   /api/auth/login");
     logger.LogInformation("   - POST   /api/auth/register");
-    logger.LogInformation("   - POST   /api/optimization/optimize");
-    logger.LogInformation("   - GET    /api/optimization/models");
-    logger.LogInformation("   - GET    /api/optimization/strategies");
+    logger.LogInformation("   - POST   /api/chat/send");      
+    logger.LogInformation("   - GET    /api/chat/models");        
+    logger.LogInformation("   - GET    /api/chat/sessions");       
+    logger.LogInformation("   - GET    /api/chat/health");         
     logger.LogInformation("========================================");
     logger.LogInformation("Press Ctrl+C to shut down");
 });
 
 try
 {
-    Log.Information("Starting PromptOptimizer API...");
+    Log.Information("Starting AI Chat API...");
     app.Run();
 }
 catch (Exception ex)
@@ -244,6 +235,7 @@ static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
             onRetry: (outcome, timespan, retryCount, context) =>
             {
                 var logger = Log.ForContext<Program>();
-                logger.Warning("Delaying for {Delay}ms, then making retry {Retry}.", timespan.TotalMilliseconds, retryCount);
+                logger.Warning("Delaying for {Delay}ms, then making retry {Retry}.",
+                    timespan.TotalMilliseconds, retryCount);
             });
 }

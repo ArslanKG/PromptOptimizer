@@ -4,10 +4,11 @@ namespace PromptOptimizer.Core.Interfaces
 {
     public interface IValidationService
     {
-        Core.DTOs.ValidationResult ValidateOptimizationRequest(OptimizationRequest request);
-
-        Core.DTOs.ValidationResult ValidateSessionId(string sessionId);
-
-        Core.DTOs.ValidationResult ValidateLimit(int? limit, int maxLimit = 100);
+        ValidationResult ValidateChatRequest(ChatRequest request);
+        ValidationResult ValidateStrategyRequest(StrategyRequest request);
+        ValidationResult ValidateModel(string modelName);
+        ValidationResult ValidateTemperature(double temperature);
+        ValidationResult ValidateSessionId(string sessionId);
+        ValidationResult ValidateLimit(int? limit, int maxLimit = 100);
     }
 }

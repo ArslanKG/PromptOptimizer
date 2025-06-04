@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿// PromptOptimizer.Infrastructure/Services/DatabaseSessionService.cs
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using PromptOptimizer.Core.DTOs;
@@ -16,7 +17,9 @@ namespace PromptOptimizer.Infrastructure.Services
         {
             WriteIndented = false,
             Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            PropertyNameCaseInsensitive = true,
+            AllowTrailingCommas = true
         };
 
         public DatabaseSessionService(AppDbContext context, ILogger<DatabaseSessionService> logger)
@@ -27,27 +30,7 @@ namespace PromptOptimizer.Infrastructure.Services
 
         public async Task<ConversationSession> CreateSessionAsync(int? userId = null)
         {
-            int validUserId;
-
-            if (userId.HasValue && userId.Value > 0)
-            {
-                var userExists = await _context.Users.AnyAsync(u => u.Id == userId.Value);
-                if (!userExists)
-                {
-                    _logger.LogWarning("User with ID {UserId} not found", userId.Value);
-                    var adminUser = await _context.Users.FirstOrDefaultAsync(u => u.IsAdmin);
-                    validUserId = adminUser?.Id ?? throw new InvalidOperationException("No admin user found");
-                }
-                else
-                {
-                    validUserId = userId.Value;
-                }
-            }
-            else
-            {
-                var adminUser = await _context.Users.FirstOrDefaultAsync(u => u.IsAdmin);
-                validUserId = adminUser?.Id ?? throw new InvalidOperationException("No admin user found");
-            }
+            var validUserId = await GetValidUserIdAsync(userId);
 
             var session = new ConversationSession
             {
@@ -77,68 +60,79 @@ namespace PromptOptimizer.Infrastructure.Services
 
             if (sessionEntity == null) return null;
 
-            var messages = new List<ConversationMessage>();
-            if (!string.IsNullOrEmpty(sessionEntity.MessagesJson))
-            {
-                try
-                {
-                    messages = JsonSerializer.Deserialize<List<ConversationMessage>>(
-                        sessionEntity.MessagesJson, JsonOptions) ?? new List<ConversationMessage>();
-                }
-                catch (JsonException ex)
-                {
-                    _logger.LogError(ex, "Error deserializing messages for session {SessionId}", sessionId);
-                }
-            }
-
-            return new ConversationSession
-            {
-                SessionId = sessionEntity.SessionId,
-                UserId = sessionEntity.UserId,
-                Title = sessionEntity.Title,
-                Messages = messages,
-                CreatedAt = sessionEntity.CreatedAt,
-                LastActivityAt = sessionEntity.LastActivityAt,
-                IsActive = sessionEntity.IsActive,
-                MessageCount = sessionEntity.MessageCount,
-                MaxMessages = sessionEntity.MaxMessages,
-                MessagesJson = sessionEntity.MessagesJson
-            };
+            return MapEntityToSession(sessionEntity);
         }
 
         public async Task<ConversationSession> AddMessageAsync(string sessionId, ConversationMessage message)
         {
-            var session = await GetSessionAsync(sessionId);
-            if (session == null)
+            try
             {
-                throw new InvalidOperationException($"Session {sessionId} not found");
-            }
+                _logger.LogDebug("Adding message to session {SessionId}: {Role} - {ContentPreview}",
+                    sessionId, message.Role, message.Content[..Math.Min(50, message.Content.Length)]);
 
-            session.Messages.Add(message);
+                var sessionEntity = await _context.Sessions
+                    .FirstOrDefaultAsync(s => s.SessionId == sessionId && s.IsActive);
 
-            session.MessagesJson = JsonSerializer.Serialize(session.Messages, JsonOptions);
-            session.MessageCount = session.Messages.Count;
-            session.LastActivityAt = DateTime.UtcNow;
+                if (sessionEntity == null)
+                {
+                    throw new InvalidOperationException($"Session {sessionId} not found");
+                }
 
-            if ((string.IsNullOrEmpty(session.Title) || session.Title == "New Session") && message.Role == "user")
-            {
-                session.Title = message.Content.Length > 50
-                    ? $"{message.Content[..50]}..."
-                    : message.Content;
-            }
+                var existingMessages = DeserializeMessages(sessionEntity.MessagesJson);
+                existingMessages.Add(message);
 
-            var sessionEntity = await _context.Sessions.FirstOrDefaultAsync(s => s.SessionId == sessionId);
-            if (sessionEntity != null)
-            {
-                sessionEntity.MessagesJson = session.MessagesJson;
-                sessionEntity.MessageCount = session.MessageCount;
-                sessionEntity.LastActivityAt = session.LastActivityAt;
-                sessionEntity.Title = session.Title;
+                sessionEntity.MessagesJson = JsonSerializer.Serialize(existingMessages, JsonOptions);
+                sessionEntity.MessageCount = existingMessages.Count;
+                sessionEntity.LastActivityAt = DateTime.UtcNow;
+
+                if (ShouldUpdateTitle(sessionEntity.Title, message))
+                {
+                    sessionEntity.Title = GenerateSessionTitle(message.Content);
+                }
 
                 await _context.SaveChangesAsync();
-            }
 
-            return session;
+                _logger.LogInformation("Saved message to session {SessionId}. Total messages: {Count}",
+                    sessionId, existingMessages.Count);
+
+                return MapEntityToSession(sessionEntity);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to add message to session {SessionId}", sessionId);
+                throw;
+            }
+        }
+
+        public async Task AddMessagesAsync(string sessionId, List<ConversationMessage> messages)
+        {
+            try
+            {
+                var sessionEntity = await _context.Sessions
+                    .FirstOrDefaultAsync(s => s.SessionId == sessionId && s.IsActive);
+
+                if (sessionEntity == null)
+                {
+                    throw new InvalidOperationException($"Session {sessionId} not found");
+                }
+
+                var existingMessages = DeserializeMessages(sessionEntity.MessagesJson);
+                existingMessages.AddRange(messages);
+
+                sessionEntity.MessagesJson = JsonSerializer.Serialize(existingMessages, JsonOptions);
+                sessionEntity.MessageCount = existingMessages.Count;
+                sessionEntity.LastActivityAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("Batch saved {Count} messages to session {SessionId}",
+                    messages.Count, sessionId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to batch add messages to session {SessionId}", sessionId);
+                throw;
+            }
         }
 
         public async Task AddMessageAsync(string sessionId, string role, string content)
@@ -149,23 +143,54 @@ namespace PromptOptimizer.Infrastructure.Services
                 Content = content,
                 Timestamp = DateTime.UtcNow
             };
+
             await AddMessageAsync(sessionId, message);
         }
 
+        // 🔥 KEY FIX: Proper conversation context retrieval
         public async Task<List<ConversationMessage>> GetConversationContextAsync(string sessionId, int? windowSize = null)
         {
-            var session = await GetSessionAsync(sessionId);
-
-            if (session == null || session.Messages.Count == 0)
+            try
             {
+                _logger.LogDebug("Getting conversation context for session {SessionId}, window: {WindowSize}",
+                    sessionId, windowSize);
+
+                var sessionEntity = await _context.Sessions
+                    .FirstOrDefaultAsync(s => s.SessionId == sessionId && s.IsActive);
+
+                if (sessionEntity == null)
+                {
+                    _logger.LogWarning("Session {SessionId} not found", sessionId);
+                    return new List<ConversationMessage>();
+                }
+
+                _logger.LogDebug("Session found - MessageCount: {Count}, JSON length: {JsonLength}",
+                    sessionEntity.MessageCount, sessionEntity.MessagesJson?.Length ?? 0);
+
+                var allMessages = DeserializeMessages(sessionEntity.MessagesJson);
+
+                if (allMessages.Count == 0)
+                {
+                    _logger.LogDebug("No messages found in session {SessionId}", sessionId);
+                    return new List<ConversationMessage>();
+                }
+
+                var windowSizeToUse = windowSize ?? 10;
+                var recentMessages = allMessages
+                    .OrderBy(m => m.Timestamp)
+                    .TakeLast(windowSizeToUse)
+                    .ToList();
+
+                _logger.LogInformation("Retrieved {RecentCount} of {TotalCount} messages for context (session {SessionId})",
+                    recentMessages.Count, allMessages.Count, sessionId);
+
+                return recentMessages;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting conversation context for session {SessionId}", sessionId);
                 return new List<ConversationMessage>();
             }
-
-            var size = windowSize ?? 10;
-            return session.Messages
-                .OrderBy(m => m.Timestamp)
-                .TakeLast(size)
-                .ToList();
         }
 
         public async Task<ConversationHistoryResponse> GetConversationHistoryAsync(string sessionId, int? limit = null)
@@ -191,7 +216,9 @@ namespace PromptOptimizer.Infrastructure.Services
 
         public async Task<bool> ClearSessionAsync(string sessionId)
         {
-            var sessionEntity = await _context.Sessions.FirstOrDefaultAsync(s => s.SessionId == sessionId);
+            var sessionEntity = await _context.Sessions
+                .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+
             if (sessionEntity != null)
             {
                 sessionEntity.IsActive = false;
@@ -199,12 +226,14 @@ namespace PromptOptimizer.Infrastructure.Services
                 _logger.LogInformation("Cleared session {SessionId}", sessionId);
                 return true;
             }
+
             return false;
         }
 
         public async Task<List<SessionResponse>> GetActiveSessionsAsync(int? userId = null)
         {
             var query = _context.Sessions.Where(s => s.IsActive);
+
             if (userId.HasValue)
             {
                 query = query.Where(s => s.UserId == userId.Value);
@@ -228,7 +257,81 @@ namespace PromptOptimizer.Infrastructure.Services
 
         public async Task<bool> SessionExistsAsync(string sessionId)
         {
-            return await _context.Sessions.AnyAsync(s => s.SessionId == sessionId && s.IsActive);
+            return await _context.Sessions
+                .AnyAsync(s => s.SessionId == sessionId && s.IsActive);
+        }
+
+        public async Task UpdateSessionTitleAsync(string sessionId, string title)
+        {
+            var sessionEntity = await _context.Sessions
+                .FirstOrDefaultAsync(s => s.SessionId == sessionId && s.IsActive);
+
+            if (sessionEntity != null)
+            {
+                sessionEntity.Title = title;
+                await _context.SaveChangesAsync();
+                _logger.LogDebug("Updated session {SessionId} title to '{Title}'", sessionId, title);
+            }
+        }
+
+        private async Task<int> GetValidUserIdAsync(int? userId)
+        {
+            if (userId.HasValue && userId.Value > 0)
+            {
+                var userExists = await _context.Users.AnyAsync(u => u.Id == userId.Value);
+                if (userExists) return userId.Value;
+            }
+
+            var adminUser = await _context.Users.FirstOrDefaultAsync(u => u.IsAdmin);
+            return adminUser?.Id ?? throw new InvalidOperationException("No admin user found");
+        }
+
+        private ConversationSession MapEntityToSession(ConversationSession sessionEntity)
+        {
+            var messages = DeserializeMessages(sessionEntity.MessagesJson);
+
+            return new ConversationSession
+            {
+                SessionId = sessionEntity.SessionId,
+                UserId = sessionEntity.UserId,
+                Title = sessionEntity.Title,
+                Messages = messages,
+                CreatedAt = sessionEntity.CreatedAt,
+                LastActivityAt = sessionEntity.LastActivityAt,
+                IsActive = sessionEntity.IsActive,
+                MessageCount = sessionEntity.MessageCount,
+                MaxMessages = sessionEntity.MaxMessages,
+                MessagesJson = sessionEntity.MessagesJson
+            };
+        }
+
+        private List<ConversationMessage> DeserializeMessages(string messagesJson)
+        {
+            if (string.IsNullOrEmpty(messagesJson) || messagesJson == "[]")
+            {
+                return new List<ConversationMessage>();
+            }
+
+            try
+            {
+                return JsonSerializer.Deserialize<List<ConversationMessage>>(messagesJson, JsonOptions)
+                       ?? new List<ConversationMessage>();
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogError(ex, "Error deserializing messages JSON: {Json}", messagesJson);
+                return new List<ConversationMessage>();
+            }
+        }
+
+        private bool ShouldUpdateTitle(string? currentTitle, ConversationMessage? message)
+        {
+            return string.IsNullOrEmpty(currentTitle) || currentTitle == "New Session";
+        }
+
+        private string GenerateSessionTitle(string content)
+        {
+            return content.Length > 50 ? $"{content[..47]}..." : content;
         }
     }
 }

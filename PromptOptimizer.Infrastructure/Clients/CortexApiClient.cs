@@ -6,79 +6,81 @@ using Microsoft.Extensions.Logging;
 using PromptOptimizer.Core.DTOs;
 using PromptOptimizer.Core.Interfaces;
 
-namespace PromptOptimizer.Infrastructure.Clients;
-
-public class CortexApiClient : ICortexApiClient
+namespace PromptOptimizer.Infrastructure.Clients
 {
-    private readonly HttpClient _httpClient;
-    private readonly ILogger<CortexApiClient> _logger;
-    private readonly JsonSerializerOptions _jsonOptions;
-
-    public CortexApiClient(
-        HttpClient httpClient,
-        IConfiguration configuration,
-        ILogger<CortexApiClient> logger)
+    public class CortexApiClient : ICortexApiClient
     {
-        _httpClient = httpClient;
-        _logger = logger;
+        private readonly HttpClient _httpClient;
+        private readonly ILogger<CortexApiClient> _logger;
+        private readonly JsonSerializerOptions _jsonOptions;
 
-        var apiKey = configuration["CortexApi:ApiKey"]
-            ?? throw new InvalidOperationException("CortexApi:ApiKey not configured");
-
-        _httpClient.BaseAddress = new Uri("https://api.claude.gg/v1/");
-        _httpClient.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", apiKey);
-
-        _jsonOptions = new JsonSerializerOptions
+        public CortexApiClient(
+            HttpClient httpClient,
+            IConfiguration configuration,
+            ILogger<CortexApiClient> logger)
         {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = true
-        };
-    }
+            _httpClient = httpClient;
+            _logger = logger;
 
-    public async Task<ChatCompletionResponse> CreateChatCompletionAsync(
-        ChatCompletionRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var json = JsonSerializer.Serialize(request, _jsonOptions);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var apiKey = configuration["CortexApi:ApiKey"]
+                ?? throw new InvalidOperationException("CortexApi:ApiKey not configured");
 
-            _logger.LogInformation("Sending request to CortexAPI with model: {Model}, Messages count: {MessageCount}",
-                request.Model, request.Messages.Count);
+            _httpClient.BaseAddress = new Uri("https://api.claude.gg/v1/");
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
-            var response = await _httpClient.PostAsync(
-                "chat/completions",
-                content,
-                cancellationToken);
-
-            response.EnsureSuccessStatusCode();
-
-            var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-            var result = JsonSerializer.Deserialize<ChatCompletionResponse>(responseJson, _jsonOptions)
-                ?? throw new InvalidOperationException("Failed to deserialize response");
-
-            _logger.LogInformation(
-                "Received response from CortexAPI. Tokens used: {TotalTokens}",
-                result.Usage?.TotalTokens ?? 0);
-
-            return result;
+            _jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                WriteIndented = false
+            };
         }
-        catch (HttpRequestException ex)
+
+        public async Task<ChatCompletionResponse> CreateChatCompletionAsync(
+            ChatCompletionRequest request,
+            CancellationToken cancellationToken = default)
         {
-            _logger.LogError(ex, "HTTP request failed");
-            throw;
-        }
-        catch (TaskCanceledException ex)
-        {
-            _logger.LogError(ex, "Request timeout");
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error in CortexAPI client");
-            throw;
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            try
+            {
+                if (request.Messages.Count == 0)
+                {
+                    throw new ArgumentException("Messages array cannot be empty");
+                }
+
+                _logger.LogInformation("Sending request to CortexAPI - Model: {Model}, Messages: {Count}",
+                    request.Model, request.Messages.Count);
+
+                var json = JsonSerializer.Serialize(request, _jsonOptions);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                cts.CancelAfter(TimeSpan.FromSeconds(30));
+
+                var response = await _httpClient.PostAsync("chat/completions", content, cts.Token);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                    _logger.LogError("CortexAPI error {StatusCode}: {Error}", response.StatusCode, errorContent);
+                    throw new HttpRequestException($"API Error {response.StatusCode}: {errorContent}");
+                }
+
+                var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+                var chatResponse = JsonSerializer.Deserialize<ChatCompletionResponse>(responseJson, _jsonOptions);
+
+                stopwatch.Stop();
+                _logger.LogInformation("CortexAPI responded in {Ms}ms - Tokens: {Tokens}",
+                    stopwatch.ElapsedMilliseconds, chatResponse?.Usage?.TotalTokens ?? 0);
+
+                return chatResponse ?? new ChatCompletionResponse();
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                _logger.LogError(ex, "CortexAPI request failed after {Ms}ms", stopwatch.ElapsedMilliseconds);
+                throw;
+            }
         }
     }
 }
