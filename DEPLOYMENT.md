@@ -43,14 +43,23 @@ ALLOWEDORIGINS__1=https://your-app.onrender.com
 
 ## 🌐 Render.com Deployment
 
-### Adım 1: Render.com'da Yeni Service Oluşturma
+### Adım 1: render.yaml Kullanarak Deployment (ÖNERİLEN)
+
+Repository'nizde [`render.yaml`](render.yaml) dosyası bulunuyor. Bu dosya otomatik persistent disk konfigürasyonu sağlar.
 
 1. [Render.com](https://render.com) adresine gidin
-2. "Dashboard" → "New +" → "Web Service" seçin
+2. "Dashboard" → "New +" → "Blueprint" seçin
 3. GitHub repository'nizi bağlayın
-4. Repository'nizi seçin
+4. `render.yaml` dosyası otomatik algılanacak
+5. Environment variables'ları ekleyin (aşağıda detay)
 
-### Adım 2: Service Konfigürasyonu
+### Adım 2: Manuel Service Oluşturma (Alternatif)
+
+Eğer render.yaml kullanmak istemiyorsanız:
+
+1. [Render.com](https://render.com) adresinde "New +" → "Web Service" seçin
+2. GitHub repository'nizi bağlayın
+3. Repository'nizi seçin
 
 #### Basic Settings:
 ```
@@ -71,6 +80,13 @@ Start Command: (boş bırakın - Dockerfile'da tanımlı)
 Dockerfile Path: ./Dockerfile
 Port: 10000
 Health Check Path: /health
+```
+
+#### 🗄️ Persistent Disk (ÇOK ÖNEMLİ - Database için):
+```
+Disk Name: promptoptimizer-data
+Mount Path: /app/data
+Size: 1 GB (Free tier için yeterli)
 ```
 
 ### Adım 3: Environment Variables Ekleme
@@ -141,10 +157,39 @@ curl -X POST https://your-app.onrender.com/api/public/chat/send \
 - **Cold Start**: İlk request 1-2 dakika sürebilir
 - **750 saat/ay**: Ücretsiz kullanım limiti
 
-### Database Persistence
-- SQLite database `/app/data/` dizininde persist olur
-- Container restart'ta data korunur
-- Backup önerilir (manuel export yapabilirsiniz)
+### 🗄️ Database Persistence (ÇOK ÖNEMLİ!)
+
+#### Sorun: Her Deploy'da Veriler Gidiyor
+Her yeni deployment'ta container yeniden oluşuyor ve içindeki SQLite database dosyası siliniyor.
+
+#### Çözüm: Render.com Persistent Disk
+- **render.yaml kullanıyorsanız**: Otomatik olarak `/app/data` dizini persist edilir
+- **Manuel service oluşturuyorsanız**: "Persistent Disk" ayarını mutlaka ekleyin
+
+#### Persistent Disk Ayarları:
+```
+Disk Name: promptoptimizer-data
+Mount Path: /app/data
+Size: 1 GB (Free tier için yeterli)
+```
+
+#### Database Dosya Yeri:
+- Production: `/app/data/promptoptimizer.db`
+- Logs: `/app/data/logs/`
+
+#### ✅ Kontrol Etme:
+Deploy sonrası database'in korunduğunu şöyle test edin:
+1. Admin ile login olun
+2. Bir session oluşturun
+3. Yeni deploy yapın
+4. Session'ın hala durduğunu kontrol edin
+
+#### 🔄 Manual Backup (Önerilen):
+```bash
+# Render.com üzerinden database backup (güvenlik için)
+# Shell access ile:
+sqlite3 /app/data/promptoptimizer.db ".dump" > backup.sql
+```
 
 ### Custom Domain (Opsiyonel)
 Render.com'da "Settings" → "Custom Domains" bölümünden kendi domain'inizi ekleyebilirsiniz.

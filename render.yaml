@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: promptoptimizer-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ASPNETCORE_URLS
+        value: http://*:10000
+    disk:
+      name: promptoptimizer-data
+      mountPath: /app/data
+      sizeGB: 1
+    healthCheckPath: /health

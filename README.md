@@ -717,6 +717,28 @@ builder.Services.AddCors(options =>
 
 ## 🚀 Deployment
 
+### ⚠️ Database Persistence Uyarısı
+
+**SORUN**: Her deploy'da SQLite database silinir ve tüm veriler (kullanıcılar, sessionlar) kaybolur.
+
+**ÇÖZÜM**:
+1. **Render.com için**: [`render.yaml`](render.yaml) dosyası ile persistent disk kullanın
+2. **Diğer platformlar için**: Volume mounting yapın
+
+```yaml
+# render.yaml (Önerilen)
+disk:
+  name: promptoptimizer-data
+  mountPath: /app/data
+  sizeGB: 1
+```
+
+**Test**: Deploy sonrası admin login olup session'ların korunduğunu kontrol edin.
+
+Detaylı bilgi: [`DEPLOYMENT.md`](DEPLOYMENT.md)
+
+---
+
 ### 🐳 Docker Support
 
 #### Dockerfile
